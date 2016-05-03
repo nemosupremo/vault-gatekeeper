@@ -265,12 +265,12 @@ func main() {
 	}
 
 	r := gin.Default()
+	r.SetHTMLTemplate(statusPage)
 	r.GET("/", Status)
 	r.GET("/status.json", Status)
 	r.POST("/seal", Seal)
 	r.POST("/unseal", Unseal)
 	r.POST("/token", Provide)
-	r.SetHTMLTemplate(statusPage)
 
 	if os.Getenv("VAULT_TOKEN") != "" {
 		log.Println("VAULT_TOKEN detected in environment, unsealing with token...")
