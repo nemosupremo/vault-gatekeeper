@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/franela/goreq"
 	"github.com/gin-gonic/gin"
+	"sync/atomic"
 	"time"
 )
 
@@ -94,7 +95,10 @@ func Provide(c *gin.Context) {
 	token := state.Token
 	state.RUnlock()
 
+	atomic.AddInt32(&state.Stats.Requests, 1)
+
 	if status == StatusSealed {
+		atomic.AddInt32(&state.Stats.Denied, 1)
 		c.JSON(503, struct {
 			Status string `json:"status"`
 			Ok     bool   `json:"ok"`
@@ -111,6 +115,7 @@ func Provide(c *gin.Context) {
 		if task, err := getMesosTask(reqParams.TaskId); err == nil {
 			startTime := time.Unix(0, int64(task.Statuses[len(task.Statuses)-1].Timestamp*1000000000))
 			if time.Now().Sub(startTime) > config.MaxTaskLife {
+				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(403, struct {
 					Status string `json:"status"`
 					Ok     bool   `json:"ok"`
@@ -122,12 +127,14 @@ func Provide(c *gin.Context) {
 			policy := activePolicies.Get(task.Name)
 			state.RUnlock()
 			if tempToken, err := createTokenPair(token, policy); err == nil {
+				atomic.AddInt32(&state.Stats.Successful, 1)
 				c.JSON(200, struct {
 					Status string `json:"status"`
 					Ok     bool   `json:"ok"`
 					Token  string `json:"token"`
 				}{string(state.Status), true, tempToken})
 			} else {
+				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(500, struct {
 					Status string `json:"status"`
 					Ok     bool   `json:"ok"`
@@ -135,12 +142,14 @@ func Provide(c *gin.Context) {
 				}{string(state.Status), false, err.Error()})
 			}
 		} else if err == errNoSuchTask {
+			atomic.AddInt32(&state.Stats.Denied, 1)
 			c.JSON(403, struct {
 				Status string `json:"status"`
 				Ok     bool   `json:"ok"`
 				Error  string `json:"error"`
 			}{string(state.Status), false, err.Error()})
 		} else {
+			atomic.AddInt32(&state.Stats.Denied, 1)
 			c.JSON(500, struct {
 				Status string `json:"status"`
 				Ok     bool   `json:"ok"`
@@ -148,6 +157,7 @@ func Provide(c *gin.Context) {
 			}{string(state.Status), false, err.Error()})
 		}
 	} else {
+		atomic.AddInt32(&state.Stats.Denied, 1)
 		c.JSON(400, struct {
 			Status string `json:"status"`
 			Ok     bool   `json:"ok"`
