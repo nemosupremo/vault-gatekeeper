@@ -56,6 +56,13 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `USER_ID_SALT` | `-auth-userid-salt` - When provided, the `user_id` will be hashed with `salt$user_id`.
 
+## Unsealing
+
+By default, VGM, like Vault, will start sealed. The `APP_ID` and `VAULT_TOKEN` arguments can be started with VGM in order to start unsealed.
+
+While VGM is sealed there are two ways to unseal it, via the API or with your browser (by just opening the url VGM is listening on). See the *`POST` **/unseal*** section for
+information on the different unseal methods.
+
 ## Policies
 
 VGM will create token's with given policies by using the data in it's `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
@@ -75,6 +82,12 @@ token options. A special '*' key is used as a catch all.
 		"ttl":1500,
 	}
 }
+```
+
+You will have to use the Vault API in order to set th epolicies to your backend. Assuming your policy is saved as `policy.json`, here's how to save that information using cURL.
+
+```bash
+$ curl -X POST -H "X-Vault-Token: <MY TOKEN>" -H "Content-Type: application/json" -d @policy.json http://vault/v1/secret/gatekeeper
 ```
 
 ## API

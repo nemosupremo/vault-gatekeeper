@@ -21,5 +21,10 @@ _cgo_export.*
 
 _testmain.go
 
+dist/builds/
+dist/release/
+.DS_Store
+
 *.exe
 vault-gatekeeper-mesos
+vltgatekeeper

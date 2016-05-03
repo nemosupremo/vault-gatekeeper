@@ -25,7 +25,7 @@ const (
 	StatusUnsealed GkStatus = "Unsealed"
 )
 
-var versionNo = "dev"
+var gitNearestTag = "dev"
 
 var config struct {
 	Vault struct {
@@ -222,7 +222,7 @@ func intro() {
 	fmt.Println("/__ _ _|_ _ |/  _  _ |_) _  __")
 	fmt.Println("\\_|(_| |_(/_|\\ (/_(/_|  (/_ |")
 	fmt.Println("github.com/channelmeter/vault-gatekeeper-mesos")
-	fmt.Println("Version: " + versionNo)
+	fmt.Println("Version: " + gitNearestTag)
 }
 
 func main() {
