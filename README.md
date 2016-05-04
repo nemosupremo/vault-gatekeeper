@@ -26,15 +26,19 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `LISTEN_ADDR` | `-listen` - *Default: `:9091`* - The address this service should listen on.
 
+`TLS_CERT` | `-tls-cert` - Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.
+
+`TLS_KEY` | `-tls-key` - Path to TLS key. If this value is set, gatekeeper will be served over TLS.
+
 `MESOS_MASTER` | `-mesos` - The address of the mesos master. Can be either a zookeeper link (`zk://zoo1:2181,zoo2:2181/mesos`) or a http link to a single or multiple mesos masters (`http://leader.mesos:5050`).
 
 `VAULT_ADDR` | `-vault` - The address of the vault server.
 
 `VAULT_SKIP_VERIFY` | `tls-skip-verify` - Do not verify TLS certificate.
 
-`VAULT_CACERT` | `tls-skip-verify` -  Path to a PEM encoded CA cert file to use to verify the Vault server SSL certificate.
+`VAULT_CACERT` | `-ca-cert` -  Path to a PEM encoded CA cert file to use to verify the Vault server SSL certificate.
 
-`VAULT_CAPATH` | `tls-skip-verify` -  Path to a directory of PEM encoded CA cert files to verify the Vault server SSL certificate.
+`VAULT_CAPATH` | `-ca-path` -  Path to a directory of PEM encoded CA cert files to verify the Vault server SSL certificate.
 
 `GATE_POLICIES` | `-policies` - The path on the `generic` vault backend to load policies from (See Policies section).
 
