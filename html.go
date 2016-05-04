@@ -34,6 +34,9 @@ const htmlTemplateVal = `<!DOCTYPE html>
       .active-form.active-token .visible-token {
         display: block;
       }
+      .active-form.active-cubby .visible-cubby {
+        display: block;
+      }
       .status-unsealed {
         display: {{.StatusUnsealed}};
       }
@@ -80,6 +83,7 @@ const htmlTemplateVal = `<!DOCTYPE html>
                 <option value="app-id">App ID</option>
                 <option value="github">GitHub</option>
                 <option value="userpass">Username &amp; Password</option>
+                <option value="cubby">Cubby Method</option>
                 <option value="token">Token</option>
               </select>
             </div>
@@ -134,6 +138,16 @@ const htmlTemplateVal = `<!DOCTYPE html>
             <div class="form-group form-section visible-token">
               <label for="token_token">Token: Token</label>
               <input type="text" class="form-control" id="token_token" name="token_token">
+            </div>
+            <div class="form-section visible-cubby">
+              <div class="form-group">
+                <label for="cubby_token">Cubby Method: Token</label>
+                <input type="text" class="form-control" id="cubby_token" name="cubby_token">
+              </div>
+              <div class="form-group">
+                <label for="cubby_path">Cubby Method: Path</label>
+                <input type="password" class="form-control" id="cubby_path" name="cubby_path" placeholder="/vault-token">
+              </div>
             </div>
             <div class="text-right">
               <button type="submit" class="btn btn-primary text-right">Unseal</button>

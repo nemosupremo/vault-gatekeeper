@@ -44,6 +44,10 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `VAULT_TOKEN` - Vault authorization token to make requests with.
 
+`CUBBY_TOKEN` | `-cubby-token` - Temporary vault authorization token that has a cubbyhole secret in `CUBBY_PATH` that contains the permanent vault token.
+
+`CUBBY_PATH` | `-cubby-path` - Path to key in cubbyhole. By default this is `/vault-token`.
+
 `APP_ID` | `-auth-appid` - Use the `app-id` authorization method with this app id.
 
 `USER_ID_METHOD` | `-auth-userid-method` - With the `app-id` authorization method, this argument decides how VGM should generate the user id. Valid values are `mac` and `file`.
@@ -60,7 +64,7 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 By default, VGM, like Vault, will start sealed. The `APP_ID` and `VAULT_TOKEN` arguments can be started with VGM in order to start unsealed.
 
-While VGM is sealed there are two ways to unseal it, via the API or with your browser (by just opening the url VGM is listening on). See the *`POST` **/unseal*** section for
+While VGM is sealed there are two ways to unseal it, via the API or with your browser (by just opening the url VGM is listening on). See the _`POST` **/unseal**_ section for
 information on the different unseal methods.
 
 ## Policies
@@ -131,8 +135,9 @@ Response -
 Unseal the service.
 
 Parameters (`application/json`) -
-* `type` - One of `token`, `userpass`, `app-id`, `github`
-* `token` - Vault Authorization token if `type` is `token`, Github Personal token if `type` is `github`.
+* `type` - One of `token`, `userpass`, `app-id`, `github`, `cubby`
+* `token` - Vault Authorization token if `type` is `token`, Github Personal token if `type` is `github`, temp token with `{"token":"perm_token"}` in `cubby_path` if `type` is `cubby`.
+* `cubby_path` - The path in `v1/cubbyhole/` when using `cubby` authorization. Default will be `/vault-token`.
 * `username` - Username for `userpass` authenication.
 * `password` - Password for `userpass` authenication.
 * `app_id` - See `APP_ID` in *Vault Startup Authorization Methods*

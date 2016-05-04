@@ -54,6 +54,8 @@ func Unseal(c *gin.Context) {
 
 		Username string `json:"username"`
 		Password string `json:"password"`
+
+		CubbyPath string `json:"cubby_path"`
 	}
 	switch c.Request.Header.Get("Content-Type") {
 	case "application/x-www-form-urlencoded", "multipart/form-data":
@@ -84,6 +86,9 @@ func Unseal(c *gin.Context) {
 			request.Token = c.Request.FormValue("github_token")
 		case "token":
 			request.Token = c.Request.FormValue("token_token")
+		case "cubby":
+			request.Token = c.Request.FormValue("cubby_token")
+			request.CubbyPath = c.Request.FormValue("cubby_path")
 		default:
 			c.JSON(400, struct {
 				Status string `json:"status"`
@@ -127,6 +132,11 @@ func Unseal(c *gin.Context) {
 	case "token":
 		unsealer = TokenUnsealer{
 			AuthToken: request.Token,
+		}
+	case "cubby":
+		unsealer = CubbyUnsealer{
+			TempToken: request.Token,
+			Path:      request.CubbyPath,
 		}
 	default:
 		c.JSON(400, struct {

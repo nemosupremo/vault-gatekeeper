@@ -11,6 +11,7 @@ import (
 	"hash"
 	"io/ioutil"
 	"net"
+	"path"
 	"strings"
 )
 
@@ -202,4 +203,55 @@ func (u UserpassUnsealer) Token() (string, error) {
 
 func (u UserpassUnsealer) Name() string {
 	return "userpass"
+}
+
+type CubbyUnsealer struct {
+	TempToken string
+	Path      string
+}
+
+var errInvalidTokenCubby = errors.New("Invalid token in cubby.")
+
+func (t CubbyUnsealer) Token() (string, error) {
+	if t.Path == "" {
+		t.Path = "/vault-token"
+	}
+	r, err := goreq.Request{
+		Uri: vaultPath(path.Join("/v1/cubbyhole", t.Path), ""),
+	}.WithHeader("X-Vault-Token", t.TempToken).Do()
+	if err == nil {
+		defer r.Body.Close()
+		switch r.StatusCode {
+		case 200:
+			vaultResp := struct {
+				Data struct {
+					Token string `json:"token"`
+				} `json:"data"`
+			}{}
+			if err := r.Body.FromJsonTo(&vaultResp); err == nil {
+				if vaultResp.Data.Token == "" {
+					return "", errInvalidTokenCubby
+				} else {
+					return TokenUnsealer{vaultResp.Data.Token}.Token()
+				}
+			} else {
+				return "", err
+			}
+		default:
+			var e vaultError
+			e.Code = r.StatusCode
+			if err := r.Body.FromJsonTo(&e); err == nil {
+				return "", e
+			} else {
+				e.Errors = []string{"communication error."}
+				return "", e
+			}
+		}
+	} else {
+		return "", err
+	}
+}
+
+func (t CubbyUnsealer) Name() string {
+	return "cubby"
 }

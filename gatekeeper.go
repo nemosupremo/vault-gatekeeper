@@ -39,6 +39,7 @@ var config struct {
 	Mesos         string
 	MaxTaskLife   time.Duration
 	AppIdAuth     AppIdUnsealer
+	CubbyAuth     CubbyUnsealer
 }
 
 var state struct {
@@ -78,6 +79,9 @@ func init() {
 	}(), "Do not verify TLS certificate. (Overrides the VAULT_SKIP_VERIFY environment variable if set.)")
 	flag.StringVar(&config.Vault.CaCert, "ca-cert", defaultEnvVar("VAULT_CACERT", ""), "Path to a PEM encoded CA cert file to use to verify the Vault server SSL certificate. (Overrides the VAULT_CACERT environment variable if set.)")
 	flag.StringVar(&config.Vault.CaPath, "ca-path", defaultEnvVar("VAULT_CAPATH", ""), "Path to a directory of PEM encoded CA cert files to verify the Vault server SSL certificate. (Overrides the VAULT_CAPATH environment variable if set.)")
+
+	flag.StringVar(&config.CubbyAuth.TempToken, "cubby-token", defaultEnvVar("CUBBY_TOKEN", ""), "Temporary vault authorization token that has a cubbyhole secret in CUBBY_PATH that contains the permanent vault token.")
+	flag.StringVar(&config.CubbyAuth.Path, "cubby-path", defaultEnvVar("CUBBY_PATH", "/vault-token"), "Path to key in cubbyhole. By default this is /vault-token.")
 
 	flag.StringVar(&config.AppIdAuth.AppId, "auth-appid", defaultEnvVar("APP_ID", ""), "Vault App Id for authenication. (Overrides the APP_ID environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdMethod, "auth-userid-method", defaultEnvVar("USER_ID_METHOD", ""), "Vault User Id authenication method (either 'mac' or 'file'). (Overrides the USER_ID_METHOD environment variable if set.)")
@@ -280,6 +284,14 @@ func main() {
 			os.Exit(1)
 		}
 		log.Println("Unseal successful with token provided in VAULT_TOKEN.")
+	} else if config.CubbyAuth.TempToken != "" {
+		log.Println("Attempting to unseal with provided Cubbyhole token...")
+		if err := unseal(config.CubbyAuth); err != nil {
+			log.Println("Failed to unseal using Cubbyhole. Please make sure the Cubbyhole auth is correctly setup.")
+			log.Println("Error:", err)
+			os.Exit(1)
+		}
+		log.Println("Unseal successful with token provided by Cubbyhole.")
 	} else if config.AppIdAuth.AppId != "" {
 		log.Println("Attempting to unseal with provided APP ID credentials, using user_id from '" + config.AppIdAuth.UserIdMethod + "'...")
 		if err := unseal(config.AppIdAuth); err != nil {
