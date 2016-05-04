@@ -13,7 +13,7 @@ VGM can also ensure the correct policies are set on the `perm` token by using an
 
 ## Deploying
 
-You can grab a binary from the releases or deploy the docker image `channelmeter/vault-gatekeeper-mesos`. When deploying VGM
+You can grab a binary from the releases or deploy the docker image [channelmeter/vault-gatekeeper-mesos](https://hub.docker.com/r/channelmeter/vault-gatekeeper-mesos/). When deploying VGM
 you must consider how you will deliver it's Vault authorization token. To issue a token to VGM on startup you can use
 the `VAULT_TOKEN` or `APP_ID` (and accompayning `USER_ID_*`) environment variables. Otherwise VGM functions like Vault
 in that it starts "sealed" and it must be "unsealed". It can be unsealed via JSON API, or you can direct your browser
