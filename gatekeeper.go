@@ -36,6 +36,8 @@ var config struct {
 		GkPolicies string
 	}
 	ListenAddress string
+	TlsCert       string
+	TlsKey        string
 	Mesos         string
 	MaxTaskLife   time.Duration
 	AppIdAuth     AppIdUnsealer
@@ -68,6 +70,8 @@ func defaultEnvVar(key string, def string) (val string) {
 
 func init() {
 	flag.StringVar(&config.ListenAddress, "listen", defaultEnvVar("LISTEN_ADDR", ":9201"), "Hostname and port to listen on. (Overrides the LISTEN_ADDR environment variable if set.)")
+	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.")
+	flag.StringVar(&config.TlsKey, "tls-cert", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS.")
 
 	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", ""), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
 
@@ -302,5 +306,17 @@ func main() {
 		log.Println("Unseal successful with app-id credentials.")
 	}
 	log.Printf("Listening and serving on '%s'...", config.ListenAddress)
-	r.Run(config.ListenAddress)
+
+	runFunc := func() error {
+		return r.Run(config.ListenAddress)
+	}
+	if config.TlsCert != "" || config.TlsKey != "" {
+		runFunc = func() error {
+			return r.RunTLS(config.ListenAddress, config.TlsCert, config.TlsKey)
+		}
+	}
+	if err := runFunc(); err != nil {
+		log.Println("Failed to start server. Error: " + err.Error())
+		os.Exit(1)
+	}
 }
