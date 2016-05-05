@@ -114,16 +114,16 @@ func Provide(c *gin.Context) {
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
+		if usedTaskIds.Has(reqParams.TaskId) {
+			atomic.AddInt32(&state.Stats.Denied, 1)
+			c.JSON(403, struct {
+				Status string `json:"status"`
+				Ok     bool   `json:"ok"`
+				Error  string `json:"error"`
+			}{string(state.Status), false, errAlreadyGivenKey.Error()})
+			return
+		}
 		if task, err := getMesosTask(reqParams.TaskId); err == nil {
-			if usedTaskIds.Has(reqParams.TaskId) {
-				atomic.AddInt32(&state.Stats.Denied, 1)
-				c.JSON(403, struct {
-					Status string `json:"status"`
-					Ok     bool   `json:"ok"`
-					Error  string `json:"error"`
-				}{string(state.Status), false, errAlreadyGivenKey.Error()})
-				return
-			}
 			startTime := time.Unix(0, int64(task.Statuses[len(task.Statuses)-1].Timestamp*1000000000))
 			if time.Now().Sub(startTime) > config.MaxTaskLife {
 				atomic.AddInt32(&state.Stats.Denied, 1)
