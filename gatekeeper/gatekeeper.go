@@ -20,12 +20,12 @@ var GatekeeperAddr = os.Getenv("GATEKEEPER_ADDR")
 
 var ErrNoTaskId = errors.New("No task id provided.")
 
-type vaultError struct {
+type VaultError struct {
 	Code   int      `json:"-"`
 	Errors []string `json:"errors"`
 }
 
-func (e vaultError) Error() string {
+func (e VaultError) Error() string {
 	return fmt.Sprintf("%d: %s", e.Code, strings.Join(e.Errors, ", "))
 }
 
@@ -110,7 +110,7 @@ func RequestVaultToken(taskId string) (string, error) {
 							return "", err
 						}
 					} else {
-						var e vaultError
+						var e VaultError
 						e.Code = resp.StatusCode
 						if err := decoder.Decode(&e); err == nil {
 							return "", e
