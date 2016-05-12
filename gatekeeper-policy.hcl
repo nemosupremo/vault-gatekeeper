@@ -13,7 +13,7 @@ path "auth/token/create-orphan" {
 	capabilities = ["create", "read", "sudo", "update"]
 }
 
-// Cubbyhole Unsealing
+// Policy Reading
 path "secret/gatekeeper" {
 	capabilities = ["read"]
 }
