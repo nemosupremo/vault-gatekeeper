@@ -15,7 +15,7 @@ var usedTaskIds = NewTtlSet()
 
 func createToken(token string, opts interface{}) (string, error) {
 	r, err := goreq.Request{
-		Uri:    vaultPath("/v1/auth/token/create-orphan", ""),
+		Uri:    vaultPath("/v1/auth/token/create", ""),
 		Method: "POST",
 		Body:   opts,
 	}.WithHeader("X-Vault-Token", token).Do()
@@ -46,15 +46,22 @@ func createToken(token string, opts interface{}) (string, error) {
 
 func createTokenPair(token string, p *policy) (string, error) {
 	tempTokenOpts := struct {
-		Ttl     string `json:"ttl"`
-		NumUses int    `json:"num_uses"`
-	}{"10m", 2}
+		Ttl      string   `json:"ttl"`
+		NumUses  int      `json:"num_uses"`
+		Policies []string `json:"policies"`
+		NoParent bool     `json:"no_parent"`
+	}{"10m", 2, []string{"default"}, true}
+	pol := p.Policies
+	if len(pol) == 0 { // explicitly set the policy, else the token will inherit ours
+		pol = []string{"default"}
+	}
 	permTokenOpts := struct {
 		Ttl      string            `json:"ttl,omitempty"`
 		Policies []string          `json:"policies"`
 		Meta     map[string]string `json:"meta,omitempty"`
 		NumUses  int               `json:"num_uses"`
-	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), p.Policies, p.Meta, p.NumUses}
+		NoParent bool              `json:"no_parent"`
+	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true}
 
 	if tempToken, err := createToken(token, tempTokenOpts); err == nil {
 		if permToken, err := createToken(token, permTokenOpts); err == nil {
