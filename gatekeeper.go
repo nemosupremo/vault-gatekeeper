@@ -98,7 +98,7 @@ func init() {
 	flag.BoolVar(&config.SelfRecreate, "self-recreate-token", func() bool {
 		b, err := strconv.ParseBool(defaultEnvVar("RECREATE_TOKEN", "0"))
 		return err == nil && b
-	}(), "When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for token to have a ttl).")
+	}(), "When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for the token to have a ttl).")
 
 	if d, err := time.ParseDuration(defaultEnvVar("TASK_LIFE", "2m")); err == nil {
 		flag.DurationVar(&config.MaxTaskLife, "task-life", d, "The maximum amount of time that a task can be alive during which it can ask for a authorization token.")

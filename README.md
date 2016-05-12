@@ -44,6 +44,8 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `TASK_LIFE` | `-task-life` - *Default: `2m`* - The maximum age of a task before VGM will refuse to issue tokens for it.
 
+`RECREATE_TOKEN` | `-self-recreate-token` - *Default: `false`* - When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for the token to have a ttl).
+
 ### Vault Startup Authorization Methods
 
 `VAULT_TOKEN` - Vault authorization token to make requests with.
