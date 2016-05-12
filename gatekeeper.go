@@ -35,6 +35,7 @@ var config struct {
 		CaPath     string
 		GkPolicies string
 	}
+	SelfRecreate  bool
 	ListenAddress string
 	TlsCert       string
 	TlsKey        string
@@ -94,10 +95,33 @@ func init() {
 	flag.StringVar(&config.AppIdAuth.UserIdHash, "auth-userid-hash", defaultEnvVar("USER_ID_HASH", ""), "Hash the user id with the following algorithim (sha256, sha1, md5). The hex representation of the hash will be used. (Overrides the USER_ID_HASH environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdSalt, "auth-userid-salt", defaultEnvVar("USER_ID_SALT", ""), "If hashing, salt the hash in the format 'salt$user_id'. (Overrides the USER_ID_SALT environment variable if set.)")
 
+	flag.BoolVar(&config.SelfRecreate, "self-recreate-token", func() bool {
+		b, err := strconv.ParseBool(defaultEnvVar("RECREATE_TOKEN", "0"))
+		return err == nil && b
+	}(), "When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for token to have a ttl).")
+
 	if d, err := time.ParseDuration(defaultEnvVar("TASK_LIFE", "2m")); err == nil {
 		flag.DurationVar(&config.MaxTaskLife, "task-life", d, "The maximum amount of time that a task can be alive during which it can ask for a authorization token.")
 	} else {
 		panic(d)
+	}
+}
+
+func recreateToken(token string, policies []string, ttl int) (string, error) {
+	tokenOpts := struct {
+		Ttl      string            `json:"ttl,omitempty"`
+		Policies []string          `json:"policies"`
+		Meta     map[string]string `json:"meta,omitempty"`
+		NumUses  int               `json:"num_uses"`
+		NoParent bool              `json:"no_parent"`
+	}{time.Duration(time.Duration(ttl) * time.Second).String(), policies, map[string]string{"info": "auto-created"}, 0, true}
+	if newToken, err := createToken(token, tokenOpts); err == nil {
+		state.Lock()
+		state.Token = newToken
+		state.Unlock()
+		return newToken, nil
+	} else {
+		return "", err
 	}
 }
 
@@ -130,6 +154,7 @@ func renew(token string, ttl int) error {
 }
 
 func renew_worker(token string, onUnsealed <-chan struct{}) {
+	creationTtl := 0
 	for {
 		r, err := goreq.Request{
 			Uri: vaultPath("/v1/auth/token/lookup-self", ""),
@@ -139,15 +164,32 @@ func renew_worker(token string, onUnsealed <-chan struct{}) {
 			if r.StatusCode == 200 {
 				var tokenInfo struct {
 					Data struct {
-						Ttl         int `json:"ttl"`
-						CreationTtl int `json:"creation_ttl"`
+						Ttl         int      `json:"ttl"`
+						CreationTtl int      `json:"creation_ttl"`
+						Policies    []string `json:"policies"`
 					} `json:"data"`
 				}
 				if err := r.Body.FromJsonTo(&tokenInfo); err == nil {
+					if creationTtl != 0 {
+						if config.SelfRecreate {
+							// we are hitting the max_ttl on this token
+							log.Println("Tried to renew token, and the new ttl was more than 10 seconds shorter than the expected ttl.")
+							if (creationTtl - tokenInfo.Data.Ttl) > 10 {
+								if newToken, err := recreateToken(token, tokenInfo.Data.Policies, creationTtl); err == nil {
+									log.Println("Recreated new token.")
+									token = newToken
+									continue
+								} else {
+									log.Printf("Failed to create new token. The gatekeeper will be sealed when the next renew fails. Error: %v", err)
+								}
+							}
+						}
+					}
 					if tokenInfo.Data.CreationTtl == 0 {
 						log.Println("Token has Creation TTL of 0. No need for renew.")
 						return
 					}
+					creationTtl = tokenInfo.Data.CreationTtl
 					if tokenInfo.Data.Ttl > 5 {
 						tokenInfo.Data.Ttl -= 5
 					}
