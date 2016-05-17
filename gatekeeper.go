@@ -171,17 +171,15 @@ func renew_worker(token string, onUnsealed <-chan struct{}) {
 				}
 				if err := r.Body.FromJsonTo(&tokenInfo); err == nil {
 					if creationTtl != 0 {
-						if config.SelfRecreate {
+						if config.SelfRecreate && (creationTtl-tokenInfo.Data.Ttl) > 10 {
 							// we are hitting the max_ttl on this token
 							log.Println("Tried to renew token, and the new ttl was more than 10 seconds shorter than the expected ttl.")
-							if (creationTtl - tokenInfo.Data.Ttl) > 10 {
-								if newToken, err := recreateToken(token, tokenInfo.Data.Policies, creationTtl); err == nil {
-									log.Println("Recreated new token.")
-									token = newToken
-									continue
-								} else {
-									log.Printf("Failed to create new token. The gatekeeper will be sealed when the next renew fails. Error: %v", err)
-								}
+							if newToken, err := recreateToken(token, tokenInfo.Data.Policies, creationTtl); err == nil {
+								log.Println("Recreated new token.")
+								token = newToken
+								continue
+							} else {
+								log.Printf("Failed to create new token. The gatekeeper will be sealed when the next renew fails. Error: %v", err)
 							}
 						}
 					}
@@ -276,6 +274,8 @@ func intro() {
 }
 
 func main() {
+	// gin-gonic disables the log flags
+	log.SetFlags(log.LstdFlags)
 	state.Status = StatusSealed
 	state.Started = time.Now()
 	flag.Parse()
