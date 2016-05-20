@@ -135,7 +135,20 @@ func Provide(c *gin.Context) {
 			}{string(state.Status), false, errAlreadyGivenKey.Error()})
 			return
 		}
-		if task, err := getMesosTask(reqParams.TaskId); err == nil {
+		/*
+			Sometimes the mesos task status isn't available yet in mesos
+			when we are asked for a token. In this case we wait a little while
+			and then try to get the task info again.
+		*/
+		gMT := func(taskId string) (mesosTask, error) {
+			task, err := getMesosTask(taskId)
+			if err == nil && len(task.Statuses) == 0 {
+				time.Sleep(500 * time.Millisecond)
+				task, err = getMesosTask(taskId)
+			}
+			return task, err
+		}
+		if task, err := gMT(reqParams.TaskId); err == nil {
 			if len(task.Statuses) == 0 {
 				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
 				atomic.AddInt32(&state.Stats.Denied, 1)
