@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/franela/goreq"
 	"github.com/gin-gonic/gin"
+	"log"
 	"sync/atomic"
 	"time"
 )
@@ -104,9 +105,12 @@ func Provide(c *gin.Context) {
 	token := state.Token
 	state.RUnlock()
 
+	remoteIp := c.Request.RemoteAddr
+
 	atomic.AddInt32(&state.Stats.Requests, 1)
 
 	if status == StatusSealed {
+		log.Printf("Rejected token request from %s. Reason: sealed.", remoteIp)
 		atomic.AddInt32(&state.Stats.Denied, 1)
 		c.JSON(503, struct {
 			Status string `json:"status"`
@@ -122,6 +126,7 @@ func Provide(c *gin.Context) {
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
 		if usedTaskIds.Has(reqParams.TaskId) {
+			log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errAlreadyGivenKey)
 			atomic.AddInt32(&state.Stats.Denied, 1)
 			c.JSON(403, struct {
 				Status string `json:"status"`
@@ -132,6 +137,7 @@ func Provide(c *gin.Context) {
 		}
 		if task, err := getMesosTask(reqParams.TaskId); err == nil {
 			if len(task.Statuses) == 0 {
+				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(403, struct {
 					Status string `json:"status"`
@@ -142,6 +148,7 @@ func Provide(c *gin.Context) {
 			}
 			startTime := time.Unix(0, int64(task.Statuses[len(task.Statuses)-1].Timestamp*1000000000))
 			if time.Now().Sub(startTime) > config.MaxTaskLife {
+				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(403, struct {
 					Status string `json:"status"`
@@ -154,6 +161,7 @@ func Provide(c *gin.Context) {
 			policy := activePolicies.Get(task.Name)
 			state.RUnlock()
 			if tempToken, err := createTokenPair(token, policy); err == nil {
+				log.Printf("Provided token pair for %s (Task Id: %s) (Task Name: %s). Policies: %v", remoteIp, reqParams.TaskId, task.Name, policy.Policies)
 				atomic.AddInt32(&state.Stats.Successful, 1)
 				usedTaskIds.Put(reqParams.TaskId, config.MaxTaskLife+1*time.Minute)
 				c.JSON(200, struct {
@@ -162,6 +170,7 @@ func Provide(c *gin.Context) {
 					Token  string `json:"token"`
 				}{string(state.Status), true, tempToken})
 			} else {
+				log.Printf("Failed to create token pair for %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errTaskNotFresh)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(500, struct {
 					Status string `json:"status"`
@@ -170,6 +179,7 @@ func Provide(c *gin.Context) {
 				}{string(state.Status), false, err.Error()})
 			}
 		} else if err == errNoSuchTask {
+			log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errNoSuchTask)
 			atomic.AddInt32(&state.Stats.Denied, 1)
 			c.JSON(403, struct {
 				Status string `json:"status"`
@@ -177,6 +187,7 @@ func Provide(c *gin.Context) {
 				Error  string `json:"error"`
 			}{string(state.Status), false, err.Error()})
 		} else {
+			log.Printf("Failed to retrieve task information for %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, err)
 			atomic.AddInt32(&state.Stats.Denied, 1)
 			c.JSON(500, struct {
 				Status string `json:"status"`
@@ -185,6 +196,7 @@ func Provide(c *gin.Context) {
 			}{string(state.Status), false, err.Error()})
 		}
 	} else {
+		log.Printf("Rejected token request from %s. Reason: %v", remoteIp, err)
 		atomic.AddInt32(&state.Stats.Denied, 1)
 		c.JSON(400, struct {
 			Status string `json:"status"`
