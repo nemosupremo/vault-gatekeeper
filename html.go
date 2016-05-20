@@ -65,6 +65,7 @@ const htmlTemplateVal = `<!DOCTYPE html>
             <li class="list-group-item">Successful Requests: {{.Stats.Successful}}</li>
             <li class="list-group-item">Denied Requests: {{.Stats.Denied}}</li>
             <li class="list-group-item">Uptime: {{.Uptime}}</li>
+            <li class="list-group-item">Version: {{.Version}}</li>
           </ul>
         </div>
         <div class="col-sm-8 status-unsealed">

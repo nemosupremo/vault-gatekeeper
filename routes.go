@@ -16,12 +16,14 @@ func Status(c *gin.Context) {
 		Status         string      `json:"status"`
 		Started        time.Time   `json:"started"`
 		Ok             bool        `json:"ok"`
+		Version        string      `json:"version"`
 	}
 	opts.Stats = state.Stats
 	opts.Uptime = time.Now().Sub(state.Started).String()
 	opts.Status = string(state.Status)
 	opts.Started = state.Started
 	opts.Ok = true
+	opts.Version = gitNearestTag
 	switch state.Status {
 	case StatusSealed:
 		opts.StatusSealed = "block"
