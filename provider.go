@@ -100,6 +100,7 @@ func createTokenPair(token string, p *policy) (string, error) {
 }
 
 func Provide(c *gin.Context) {
+	requestStartTime := time.Now()
 	state.RLock()
 	status := state.Status
 	token := state.Token
@@ -136,14 +137,16 @@ func Provide(c *gin.Context) {
 			return
 		}
 		/*
-			Sometimes the mesos task status isn't available yet in mesos
-			when we are asked for a token. In this case we wait a little while
-			and then try to get the task info again.
+			The task can start, but the task's framework may have not reported
+			that it is RUNNING back to mesos. In this case, the task will still
+			be STAGING and have a statuses length of 0.
+
+			This is a network race, so we just sleep and try again.
 		*/
 		gMT := func(taskId string) (mesosTask, error) {
 			task, err := getMesosTask(taskId)
-			if err == nil && len(task.Statuses) == 0 {
-				time.Sleep(1000 * time.Millisecond)
+			for i := time.Duration(0); i < 3 && err == nil && len(task.Statuses) == 0; i++ {
+				time.Sleep((500 + 250*i) * time.Millisecond)
 				task, err = getMesosTask(taskId)
 			}
 			return task, err
@@ -159,7 +162,8 @@ func Provide(c *gin.Context) {
 				}{string(state.Status), false, errTaskNotFresh.Error()})
 				return
 			}
-			startTime := time.Unix(0, int64(task.Statuses[len(task.Statuses)-1].Timestamp*1000000000))
+			// https://github.com/apache/mesos/blob/a61074586d778d432ba991701c9c4de9459db897/src/webui/master/static/js/controllers.js#L148
+			startTime := time.Unix(0, int64(task.Statuses[0].Timestamp*1000000000))
 			if time.Now().Sub(startTime) > config.MaxTaskLife {
 				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
 				atomic.AddInt32(&state.Stats.Denied, 1)
@@ -174,7 +178,7 @@ func Provide(c *gin.Context) {
 			policy := activePolicies.Get(task.Name)
 			state.RUnlock()
 			if tempToken, err := createTokenPair(token, policy); err == nil {
-				log.Printf("Provided token pair for %s (Task Id: %s) (Task Name: %s). Policies: %v", remoteIp, reqParams.TaskId, task.Name, policy.Policies)
+				log.Printf("Provided token pair for %s in %v. (Task Id: %s) (Task Name: %s). Policies: %v", remoteIp, time.Now().Sub(requestStartTime), reqParams.TaskId, task.Name, policy.Policies)
 				atomic.AddInt32(&state.Stats.Successful, 1)
 				usedTaskIds.Put(reqParams.TaskId, config.MaxTaskLife+1*time.Minute)
 				c.JSON(200, struct {
