@@ -143,7 +143,7 @@ func Provide(c *gin.Context) {
 		gMT := func(taskId string) (mesosTask, error) {
 			task, err := getMesosTask(taskId)
 			if err == nil && len(task.Statuses) == 0 {
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				task, err = getMesosTask(taskId)
 			}
 			return task, err
