@@ -43,8 +43,9 @@ type TokenUnsealer struct {
 
 func (t TokenUnsealer) Token() (string, error) {
 	r, err := goreq.Request{
-		Uri:          vaultPath("/v1/auth/token/lookup-self", ""),
-		MaxRedirects: 10,
+		Uri:             vaultPath("/v1/auth/token/lookup-self", ""),
+		MaxRedirects:    10,
+		RedirectHeaders: true,
 	}.WithHeader("X-Vault-Token", t.AuthToken).Do()
 	if err == nil {
 		defer r.Body.Close()
@@ -157,10 +158,11 @@ func (a AppIdUnsealer) Token() (string, error) {
 		}
 	}
 	return a.genericUnsealer.Token(goreq.Request{
-		Uri:          vaultPath("/v1/auth/app-id/login/"+a.AppId, ""),
-		Method:       "POST",
-		Body:         body,
-		MaxRedirects: 10,
+		Uri:             vaultPath("/v1/auth/app-id/login/"+a.AppId, ""),
+		Method:          "POST",
+		Body:            body,
+		MaxRedirects:    10,
+		RedirectHeaders: true,
 	})
 }
 
@@ -180,7 +182,8 @@ func (gh GithubUnsealer) Token() (string, error) {
 		Body: struct {
 			Token string `json:"token"`
 		}{gh.PersonalToken},
-		MaxRedirects: 10,
+		MaxRedirects:    10,
+		RedirectHeaders: true,
 	})
 }
 
@@ -201,7 +204,8 @@ func (u UserpassUnsealer) Token() (string, error) {
 		Body: struct {
 			Password string `json:"password"`
 		}{u.Password},
-		MaxRedirects: 10,
+		MaxRedirects:    10,
+		RedirectHeaders: true,
 	})
 }
 
@@ -221,8 +225,9 @@ func (t CubbyUnsealer) Token() (string, error) {
 		t.Path = "/vault-token"
 	}
 	r, err := goreq.Request{
-		Uri:          vaultPath(path.Join("/v1/cubbyhole", t.Path), ""),
-		MaxRedirects: 10,
+		Uri:             vaultPath(path.Join("/v1/cubbyhole", t.Path), ""),
+		MaxRedirects:    10,
+		RedirectHeaders: true,
 	}.WithHeader("X-Vault-Token", t.TempToken).Do()
 	if err == nil {
 		defer r.Body.Close()

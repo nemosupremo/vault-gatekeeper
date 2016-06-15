@@ -131,8 +131,9 @@ func renew(token string, ttl int) error {
 		Body: struct {
 			Increment int `json:"increment"`
 		}{ttl},
-		Method:       "POST",
-		MaxRedirects: 10,
+		Method:          "POST",
+		MaxRedirects:    10,
+		RedirectHeaders: true,
 	}.WithHeader("X-Vault-Token", token).Do()
 	if err == nil {
 		defer r.Body.Close()
@@ -158,8 +159,9 @@ func renew_worker(token string, onUnsealed <-chan struct{}) {
 	creationTtl := 0
 	for {
 		r, err := goreq.Request{
-			Uri:          vaultPath("/v1/auth/token/lookup-self", ""),
-			MaxRedirects: 10,
+			Uri:             vaultPath("/v1/auth/token/lookup-self", ""),
+			MaxRedirects:    10,
+			RedirectHeaders: true,
 		}.WithHeader("X-Vault-Token", token).Do()
 		if err == nil {
 			defer r.Body.Close()
