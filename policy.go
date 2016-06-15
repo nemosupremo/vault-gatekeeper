@@ -40,7 +40,8 @@ func (p policies) Get(key string) *policy {
 
 func (p policies) Load(authToken string) error {
 	r, err := goreq.Request{
-		Uri: vaultPath(path.Join("/v1/secret", config.Vault.GkPolicies), ""),
+		Uri:          vaultPath(path.Join("/v1/secret", config.Vault.GkPolicies), ""),
+		MaxRedirects: 10,
 	}.WithHeader("X-Vault-Token", authToken).Do()
 	if err == nil {
 		defer r.Body.Close()

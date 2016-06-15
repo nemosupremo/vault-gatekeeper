@@ -16,9 +16,10 @@ var usedTaskIds = NewTtlSet()
 
 func createToken(token string, opts interface{}) (string, error) {
 	r, err := goreq.Request{
-		Uri:    vaultPath("/v1/auth/token/create", ""),
-		Method: "POST",
-		Body:   opts,
+		Uri:          vaultPath("/v1/auth/token/create", ""),
+		Method:       "POST",
+		Body:         opts,
+		MaxRedirects: 10,
 	}.WithHeader("X-Vault-Token", token).Do()
 	if err == nil {
 		defer r.Body.Close()
@@ -72,6 +73,7 @@ func createTokenPair(token string, p *policy) (string, error) {
 				Body: struct {
 					Token string `json:"token"`
 				}{permToken},
+				MaxRedirects: 10,
 			}.WithHeader("X-Vault-Token", tempToken).Do()
 			if err == nil {
 				defer r.Body.Close()
