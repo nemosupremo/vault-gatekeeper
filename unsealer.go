@@ -42,11 +42,11 @@ type TokenUnsealer struct {
 }
 
 func (t TokenUnsealer) Token() (string, error) {
-	r, err := goreq.Request{
+	r, err := VaultRequest{goreq.Request{
 		Uri:             vaultPath("/v1/auth/token/lookup-self", ""),
 		MaxRedirects:    10,
 		RedirectHeaders: true,
-	}.WithHeader("X-Vault-Token", t.AuthToken).Do()
+	}.WithHeader("X-Vault-Token", t.AuthToken)}.Do()
 	if err == nil {
 		defer r.Body.Close()
 		switch r.StatusCode {
@@ -74,7 +74,7 @@ func (t TokenUnsealer) Name() string {
 type genericUnsealer struct{}
 
 func (g genericUnsealer) Token(req goreq.Request) (string, error) {
-	r, err := req.Do()
+	r, err := VaultRequest{req}.Do()
 	if err == nil {
 		defer r.Body.Close()
 		switch r.StatusCode {
@@ -224,11 +224,11 @@ func (t CubbyUnsealer) Token() (string, error) {
 	if t.Path == "" {
 		t.Path = "/vault-token"
 	}
-	r, err := goreq.Request{
+	r, err := VaultRequest{goreq.Request{
 		Uri:             vaultPath(path.Join("/v1/cubbyhole", t.Path), ""),
 		MaxRedirects:    10,
 		RedirectHeaders: true,
-	}.WithHeader("X-Vault-Token", t.TempToken).Do()
+	}.WithHeader("X-Vault-Token", t.TempToken)}.Do()
 	if err == nil {
 		defer r.Body.Close()
 		switch r.StatusCode {

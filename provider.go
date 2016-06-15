@@ -15,13 +15,13 @@ var errAlreadyGivenKey = errors.New("This task has already been given a token.")
 var usedTaskIds = NewTtlSet()
 
 func createToken(token string, opts interface{}) (string, error) {
-	r, err := goreq.Request{
+	r, err := VaultRequest{goreq.Request{
 		Uri:             vaultPath("/v1/auth/token/create", ""),
 		Method:          "POST",
 		Body:            opts,
 		MaxRedirects:    10,
 		RedirectHeaders: true,
-	}.WithHeader("X-Vault-Token", token).Do()
+	}.WithHeader("X-Vault-Token", token)}.Do()
 	if err == nil {
 		defer r.Body.Close()
 		switch r.StatusCode {
@@ -68,7 +68,7 @@ func createTokenPair(token string, p *policy) (string, error) {
 
 	if tempToken, err := createToken(token, tempTokenOpts); err == nil {
 		if permToken, err := createToken(token, permTokenOpts); err == nil {
-			r, err := goreq.Request{
+			r, err := VaultRequest{goreq.Request{
 				Uri:    vaultPath("/v1/cubbyhole/vault-token", ""),
 				Method: "POST",
 				Body: struct {
@@ -76,7 +76,7 @@ func createTokenPair(token string, p *policy) (string, error) {
 				}{permToken},
 				MaxRedirects:    10,
 				RedirectHeaders: true,
-			}.WithHeader("X-Vault-Token", tempToken).Do()
+			}.WithHeader("X-Vault-Token", tempToken)}.Do()
 			if err == nil {
 				defer r.Body.Close()
 				switch r.StatusCode {
