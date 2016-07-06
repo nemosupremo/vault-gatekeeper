@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 )
 
 var HttpClient = &http.Client{}
@@ -19,15 +18,6 @@ var VaultAddress = os.Getenv("VAULT_ADDR")
 var GatekeeperAddr = os.Getenv("GATEKEEPER_ADDR")
 
 var ErrNoTaskId = errors.New("No task id provided.")
-
-type VaultError struct {
-	Code   int      `json:"-"`
-	Errors []string `json:"errors"`
-}
-
-func (e VaultError) Error() string {
-	return fmt.Sprintf("%d: %s", e.Code, strings.Join(e.Errors, ", "))
-}
 
 func init() {
 	tr := &http.Transport{
@@ -59,7 +49,21 @@ func init() {
 }
 
 func RequestVaultToken(taskId string) (string, error) {
-	if taskId == "" {
+	tempToken, err := requestTempToken(taskId)
+	if err != nil {
+		return "", err
+	}
+
+	permToken, err := requestPermToken(tempToken)
+	if err != nil {
+		return "", err
+	}
+
+	return permToken, err
+}
+
+func requestTempToken(taskID string) (string, error) {
+	if taskID == "" {
 		return "", ErrNoTaskId
 	}
 
@@ -69,8 +73,7 @@ func RequestVaultToken(taskId string) (string, error) {
 	}
 	gkAddr.Path = "/token"
 
-	gkTaskID := gkTokenReq{TaskId: taskId}
-
+	gkTaskID := gkTokenReq{TaskId: taskID}
 	gkReq, err := json.Marshal(gkTaskID)
 	if err != nil {
 		return "", err
@@ -83,7 +86,6 @@ func RequestVaultToken(taskId string) (string, error) {
 	defer gkResp.Body.Close()
 
 	gkTokResp := &gkTokenResp{}
-
 	if err := json.NewDecoder(gkResp.Body).Decode(gkTokResp); err != nil {
 		return "", err
 	}
@@ -92,6 +94,10 @@ func RequestVaultToken(taskId string) (string, error) {
 		return "", errors.New(gkTokResp.Error)
 	}
 
+	return gkTokResp.Token, nil
+}
+
+func requestPermToken(tempToken string) (string, error) {
 	vaultAddr, err := url.Parse(VaultAddress)
 	if err != nil {
 		return "", err
@@ -102,7 +108,7 @@ func RequestVaultToken(taskId string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("X-Vault-Token", gkTokResp.Token)
+	req.Header.Add("X-Vault-Token", tempToken)
 
 	vaultResp, err := HttpClient.Do(req)
 	if err != nil {
@@ -110,21 +116,12 @@ func RequestVaultToken(taskId string) (string, error) {
 	}
 	defer vaultResp.Body.Close()
 
-	bodyDecoder := json.NewDecoder(vaultResp.Body)
-
-	if vaultResp.StatusCode != 200 {
-		var vaultErr VaultError
-		vaultErr.Code = vaultResp.StatusCode
-		if err := bodyDecoder.Decode(&vaultErr); err != nil {
-			vaultErr.Errors = []string{"communication error."}
-			return "", err
-		}
-
-		return "", vaultErr
+	if err := buildVaultError(vaultResp); err != nil {
+		return "", err
 	}
 
 	vaultSecret := &vaultSecret{}
-	if err := bodyDecoder.Decode(vaultSecret); err != nil {
+	if err := json.NewDecoder(vaultResp.Body).Decode(vaultSecret); err != nil {
 		return "", err
 	}
 
