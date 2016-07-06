@@ -23,6 +23,7 @@ _testmain.go
 
 dist/builds/
 dist/release/
+.idea/
 .DS_Store
 
 *.exe
