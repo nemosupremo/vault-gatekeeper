@@ -69,9 +69,7 @@ func RequestVaultToken(taskId string) (string, error) {
 	}
 	gkAddr.Path = "/token"
 
-	gkTaskID := struct {
-		TaskId string `json:"task_id"`
-	}{taskId}
+	gkTaskID := gkTokenReq{TaskId: taskId}
 
 	gkReq, err := json.Marshal(gkTaskID)
 	if err != nil {
@@ -84,14 +82,9 @@ func RequestVaultToken(taskId string) (string, error) {
 	}
 	defer gkResp.Body.Close()
 
-	var gkTokResp struct {
-		OK     bool   `json:"ok"`
-		Token  string `json:"token"`
-		Status string `json:"status"`
-		Error  string `json:"error"`
-	}
+	gkTokResp := &gkTokenResp{}
 
-	if err := json.NewDecoder(gkResp.Body).Decode(&gkTokResp); err != nil {
+	if err := json.NewDecoder(gkResp.Body).Decode(gkTokResp); err != nil {
 		return "", err
 	}
 
@@ -130,13 +123,8 @@ func RequestVaultToken(taskId string) (string, error) {
 		return "", vaultErr
 	}
 
-	vaultSecret := struct {
-		Data struct {
-			Token string `json:"token"`
-		} `json:"data"`
-	}{}
-
-	if err := bodyDecoder.Decode(&vaultSecret); err != nil {
+	vaultSecret := &vaultSecret{}
+	if err := bodyDecoder.Decode(vaultSecret); err != nil {
 		return "", err
 	}
 
