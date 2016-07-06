@@ -62,75 +62,85 @@ func RequestVaultToken(taskId string) (string, error) {
 	if taskId == "" {
 		return "", ErrNoTaskId
 	}
-	var gkPath string
-	var vaultPath string
-	if u, err := url.Parse(GatekeeperAddr); err == nil {
-		u.Path = "/token"
-		gkPath = u.String()
-	} else {
+
+	gkAddr, err := url.Parse(GatekeeperAddr)
+	if err != nil {
 		return "", err
 	}
+	gkAddr.Path = "/token"
 
-	if u, err := url.Parse(VaultAddress); err == nil {
-		u.Path = "/v1/cubbyhole/vault-token"
-		vaultPath = u.String()
-	} else {
-		return "", err
-	}
-
-	gkb := struct {
+	gkTaskID := struct {
 		TaskId string `json:"task_id"`
 	}{taskId}
-	payload, _ := json.Marshal(gkb)
 
-	var gkResp struct {
-		Status string `json:"status"`
-		Ok     bool   `json:"ok"`
-		Error  string `json:"error"`
-		Token  string `json:"token"`
-	}
-
-	if resp, err := HttpClient.Post(gkPath, "application/json", bytes.NewReader(payload)); err == nil {
-		decoder := json.NewDecoder(resp.Body)
-		if err := decoder.Decode(&gkResp); err == nil {
-			if gkResp.Ok {
-				req, _ := http.NewRequest("GET", vaultPath, nil)
-				req.Header.Add("X-Vault-Token", gkResp.Token)
-				if resp, err := HttpClient.Do(req); err == nil {
-					decoder := json.NewDecoder(resp.Body)
-					vaultResp := struct {
-						Data struct {
-							Token string `json:"token"`
-						} `json:"data"`
-					}{}
-					if resp.StatusCode == 200 {
-						if err := decoder.Decode(&vaultResp); err == nil {
-							return vaultResp.Data.Token, nil
-						} else {
-							return "", err
-						}
-					} else {
-						var e VaultError
-						e.Code = resp.StatusCode
-						if err := decoder.Decode(&e); err == nil {
-							return "", e
-						} else {
-							e.Errors = []string{"communication error."}
-							return "", e
-						}
-					}
-				} else {
-					return "", err
-				}
-			} else {
-				return "", errors.New(gkResp.Error)
-			}
-		} else {
-			return "", err
-		}
-	} else {
+	gkReq, err := json.Marshal(gkTaskID)
+	if err != nil {
 		return "", err
 	}
+
+	gkResp, err := HttpClient.Post(gkAddr.String(), "application/json", bytes.NewReader(gkReq))
+	if err != nil {
+		return "", err
+	}
+	defer gkResp.Body.Close()
+
+	var gkTokResp struct {
+		OK     bool   `json:"ok"`
+		Token  string `json:"token"`
+		Status string `json:"status"`
+		Error  string `json:"error"`
+	}
+
+	if err := json.NewDecoder(gkResp.Body).Decode(&gkTokResp); err != nil {
+		return "", err
+	}
+
+	if !gkTokResp.OK {
+		return "", errors.New(gkTokResp.Error)
+	}
+
+	vaultAddr, err := url.Parse(VaultAddress)
+	if err != nil {
+		return "", err
+	}
+	vaultAddr.Path = "/v1/cubbyhole/vault-token"
+
+	req, err := http.NewRequest("GET", vaultAddr.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("X-Vault-Token", gkTokResp.Token)
+
+	vaultResp, err := HttpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer vaultResp.Body.Close()
+
+	bodyDecoder := json.NewDecoder(vaultResp.Body)
+
+	if vaultResp.StatusCode != 200 {
+		var vaultErr VaultError
+		vaultErr.Code = vaultResp.StatusCode
+		if err := bodyDecoder.Decode(&vaultErr); err != nil {
+			vaultErr.Errors = []string{"communication error."}
+			return "", err
+		}
+
+		return "", vaultErr
+	}
+
+	vaultSecret := struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}{}
+
+	if err := bodyDecoder.Decode(&vaultSecret); err != nil {
+		return "", err
+	}
+
+	return vaultSecret.Data.Token, nil
 }
 
 func EnvRequestVaultToken() (string, error) {
