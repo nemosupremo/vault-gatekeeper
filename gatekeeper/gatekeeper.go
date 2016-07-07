@@ -102,7 +102,7 @@ func requestPermToken(tempToken string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	vaultAddr.Path = "/v1/cubbyhole/vault-token"
+	vaultAddr.Path = "/v1/cubbyhole/response"
 
 	req, err := http.NewRequest("GET", vaultAddr.String(), nil)
 	if err != nil {
@@ -120,12 +120,12 @@ func requestPermToken(tempToken string) (string, error) {
 		return "", err
 	}
 
-	vaultSecret := &vaultSecret{}
-	if err := json.NewDecoder(vaultResp.Body).Decode(vaultSecret); err != nil {
+	cubbyholeSecret := &cubbyholeSecret{}
+	if err := json.NewDecoder(vaultResp.Body).Decode(cubbyholeSecret); err != nil {
 		return "", err
 	}
 
-	return vaultSecret.Data.Token, nil
+	return cubbyholeSecret.Data.WrappedSecret.Token, nil
 }
 
 func EnvRequestVaultToken() (string, error) {

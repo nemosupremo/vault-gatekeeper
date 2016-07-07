@@ -89,7 +89,7 @@ func createWrappedToken(token string, opts interface{}, wrapTTL time.Duration) (
 	return t.WrapInfo.Token, nil
 }
 
-func createTokenPair(token string, p *policy, wrap bool) (string, error) {
+func createTokenPair(token string, p *policy) (string, error) {
 	pol := p.Policies
 	if len(pol) == 0 { // explicitly set the policy, else the token will inherit ours
 		pol = []string{"default"}
@@ -130,7 +130,6 @@ func Provide(c *gin.Context) {
 
 	var reqParams struct {
 		TaskId    string `json:"task_id"`
-		WrapToken bool   `json:"wrap_token"`
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
@@ -185,7 +184,7 @@ func Provide(c *gin.Context) {
 			state.RLock()
 			policy := activePolicies.Get(task.Name)
 			state.RUnlock()
-			if tempToken, err := createTokenPair(token, policy, reqParams.WrapToken); err == nil {
+			if tempToken, err := createTokenPair(token, policy); err == nil {
 				log.Printf("Provided token pair for %s in %v. (Task Id: %s) (Task Name: %s). Policies: %v", remoteIp, time.Now().Sub(requestStartTime), reqParams.TaskId, task.Name, policy.Policies)
 				atomic.AddInt32(&state.Stats.Successful, 1)
 				usedTaskIds.Put(reqParams.TaskId, config.MaxTaskLife+1*time.Minute)

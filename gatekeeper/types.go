@@ -40,8 +40,12 @@ type gkTokenResp struct {
 	Error  string `json:"error"`
 }
 
-type vaultSecret struct {
-	Data vaultSecretData `json:"data"`
+type cubbyholeSecret struct {
+	Data wrappedResponseData `json:"data"`
+}
+
+type wrappedResponseData struct {
+	WrappedSecret vaultSecretData `json:"response"`
 }
 
 type vaultSecretData struct {
