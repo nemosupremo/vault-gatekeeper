@@ -6,10 +6,12 @@ to other services who's lifecycles are managed by [Mesos](https://mesos.apache.o
 (such as [Marathon](https://mesosphere.github.io/marathon/)).
 
 VGM takes the Cubbyhole Authenication approach outlined by Jeff Mitchell on [Vault Blog](https://www.hashicorp.com/blog/vault-cubbyhole-principles.html).
+Specifically Vault response wrapping is used as outlined in the [Vault documentation](https://www.vaultproject.io/docs/concepts/response-wrapping.html).
 In short, a service will request a vault token from VGM supplying its Mesos task id. VGM will then check with Mesos to ensure that the task has been
-recently started, and if so, create 2 tokens (`temp` and `perm`). The `temp` token, which can only be used twice, will be first used to write a
-the `perm` token into it's own Cubbyhole. This `temp` token is then provided to the service which can use that token to retrieve the `perm` token.
-VGM can also ensure the correct policies are set on the `perm` token by using an internal configuration based on the task's name in Mesos.
+recently started, and if so, request the creation of 2 tokens (`temp` and `perm`). The `temp` token, which can only be used twice, will be first used
+by Vault internally to write the `perm` token into it's own Cubbyhole at the path `response`. This `temp` token is then provided to the service which
+can use that token to retrieve the `perm` token. VGM can also ensure the correct policies are set on the `perm` token by using an internal configuration
+based on the task's name in Mesos.
 
 ## Deploying
 

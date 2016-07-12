@@ -30,6 +30,11 @@ type vaultTokenResp struct {
 		LeaseDuration int    `json:"lease_duration"`
 		TTL           int    `json:"ttl"`
 	} `json:"auth"`
+	WrapInfo struct {
+		Token           string `json:"token"`
+		TTL             int    `json:"ttl"`
+		WrappedAccessor string `json:"wrapped_accessor"`
+	} `json:"wrap_info"`
 }
 
 type Unsealer interface {

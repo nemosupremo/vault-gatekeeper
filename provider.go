@@ -6,6 +6,7 @@ import (
 	"github.com/franela/goreq"
 	"github.com/gin-gonic/gin"
 	"log"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -47,17 +48,53 @@ func createToken(token string, opts interface{}) (string, error) {
 	}
 }
 
+func createWrappedToken(token string, opts interface{}, wrapTTL time.Duration) (string, error) {
+	wrapTTLSeconds := strconv.Itoa(int(wrapTTL.Seconds()))
+
+	r, err := VaultRequest{
+		goreq.Request{
+			Uri:             vaultPath("/v1/auth/token/create", ""),
+			Method:          "POST",
+			Body:            opts,
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+		}.WithHeader("X-Vault-Token", token).WithHeader("X-Vault-Wrap-TTL", wrapTTLSeconds),
+	}.Do()
+	defer r.Body.Close()
+
+	if err != nil {
+		return "", err
+	}
+
+	if r.StatusCode != 200 {
+		var e vaultError
+		e.Code = r.StatusCode
+		if err := r.Body.FromJsonTo(&e); err == nil {
+			return "", e
+		} else {
+			e.Errors = []string{"communication error."}
+			return "", e
+		}
+	}
+
+	t := &vaultTokenResp{}
+	if err := r.Body.FromJsonTo(t); err != nil {
+		return "", err
+	}
+
+	if t.WrapInfo.Token == "" {
+		return "",  errors.New("Request for wrapped token did not return wrapped response")
+	}
+
+	return t.WrapInfo.Token, nil
+}
+
 func createTokenPair(token string, p *policy) (string, error) {
-	tempTokenOpts := struct {
-		Ttl      string   `json:"ttl"`
-		NumUses  int      `json:"num_uses"`
-		Policies []string `json:"policies"`
-		NoParent bool     `json:"no_parent"`
-	}{"10m", 2, []string{"default"}, true}
 	pol := p.Policies
 	if len(pol) == 0 { // explicitly set the policy, else the token will inherit ours
 		pol = []string{"default"}
 	}
+
 	permTokenOpts := struct {
 		Ttl      string            `json:"ttl,omitempty"`
 		Policies []string          `json:"policies"`
@@ -66,41 +103,7 @@ func createTokenPair(token string, p *policy) (string, error) {
 		NoParent bool              `json:"no_parent"`
 	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true}
 
-	if tempToken, err := createToken(token, tempTokenOpts); err == nil {
-		if permToken, err := createToken(token, permTokenOpts); err == nil {
-			r, err := VaultRequest{goreq.Request{
-				Uri:    vaultPath("/v1/cubbyhole/vault-token", ""),
-				Method: "POST",
-				Body: struct {
-					Token string `json:"token"`
-				}{permToken},
-				MaxRedirects:    10,
-				RedirectHeaders: true,
-			}.WithHeader("X-Vault-Token", tempToken)}.Do()
-			if err == nil {
-				defer r.Body.Close()
-				switch r.StatusCode {
-				case 204:
-					return tempToken, nil
-				default:
-					var e vaultError
-					e.Code = r.StatusCode
-					if err := r.Body.FromJsonTo(&e); err == nil {
-						return "", e
-					} else {
-						e.Errors = []string{"communication error."}
-						return "", e
-					}
-				}
-			} else {
-				return "", err
-			}
-		} else {
-			return "", err
-		}
-	} else {
-		return "", err
-	}
+	return createWrappedToken(token, permTokenOpts, 10 * time.Minute)
 }
 
 func Provide(c *gin.Context) {
@@ -126,7 +129,7 @@ func Provide(c *gin.Context) {
 	}
 
 	var reqParams struct {
-		TaskId string `json:"task_id"`
+		TaskId    string `json:"task_id"`
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
