@@ -75,5 +75,4 @@ func (p policies) Load(authToken string) error {
 	} else {
 		return policyLoadError{err}
 	}
-	return nil
 }
