@@ -1,0 +1,36 @@
+language: go
+
+sudo: required
+dist: trusty
+
+#cache:
+#  directories:
+
+services:
+  - docker
+
+env:
+  global:
+    - GOMAXPROCS=2
+    - PATH=$PATH:$HOME/.minimesos/bin
+
+go:
+  - 1.6
+
+install:
+  - curl -sSL https://minimesos.org/install | sh
+
+script:
+  - set -e
+  - minimesos up
+  - docker run -d -p 8200:8200 --hostname vault --name vault sjourdan/vault
+  - bash integration.sh
+  - go vet .
+
+after_script:
+  - minimesos destroy
+  - docker stop vault
+  - docker rm vault
+
+#notifications:
+#  - email: false
