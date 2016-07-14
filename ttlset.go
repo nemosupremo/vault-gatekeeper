@@ -32,6 +32,13 @@ func (t *TtlSet) Put(key string, ttl time.Duration) {
 	t.Unlock()
 }
 
+func (t *TtlSet) Destroy() {
+	t.Lock()
+	close(t.quit)
+	t.s = nil
+	t.Unlock()
+}
+
 func (t *TtlSet) cleanup() {
 	t.Lock()
 	for k, v := range t.s {
