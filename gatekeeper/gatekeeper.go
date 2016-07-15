@@ -13,13 +13,20 @@ import (
 	"strconv"
 )
 
-var HttpClient = &http.Client{}
-var VaultAddress = os.Getenv("VAULT_ADDR")
-var GatekeeperAddr = os.Getenv("GATEKEEPER_ADDR")
+type Client struct {
+	VaultAddress      string
+	GatekeeperAddress string
+	HttpClient        *http.Client
+}
+
+var DefaultClient *Client
 
 var ErrNoTaskId = errors.New("No task id provided.")
 
 func init() {
+	DefaultClient = new(Client)
+	DefaultClient.VaultAddress = os.Getenv("VAULT_ADDR")
+	DefaultClient.GatekeeperAddress = os.Getenv("GATEKEEPER_ADDR")
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{},
 	}
@@ -45,16 +52,27 @@ func init() {
 			fmt.Fprintf(os.Stderr, "Gatekeeper: Failed to read client certs. Error: %v\n", err)
 		}
 	}
-	HttpClient = &http.Client{Transport: tr}
+	DefaultClient.HttpClient = &http.Client{Transport: tr}
 }
 
 func RequestVaultToken(taskId string) (string, error) {
-	tempToken, err := requestTempToken(taskId)
+	return DefaultClient.RequestVaultToken(taskId)
+}
+
+func EnvRequestVaultToken() (string, error) {
+	return DefaultClient.RequestVaultToken(os.Getenv("MESOS_TASK_ID"))
+}
+
+func (c *Client) RequestVaultToken(taskId string) (string, error) {
+	if c.HttpClient == nil {
+		c.HttpClient = http.DefaultClient
+	}
+	tempToken, err := c.requestTempToken(taskId)
 	if err != nil {
 		return "", err
 	}
 
-	permToken, err := requestPermToken(tempToken)
+	permToken, err := c.requestPermToken(tempToken)
 	if err != nil {
 		return "", err
 	}
@@ -62,12 +80,12 @@ func RequestVaultToken(taskId string) (string, error) {
 	return permToken, err
 }
 
-func requestTempToken(taskID string) (string, error) {
+func (c *Client) requestTempToken(taskID string) (string, error) {
 	if taskID == "" {
 		return "", ErrNoTaskId
 	}
 
-	gkAddr, err := url.Parse(GatekeeperAddr)
+	gkAddr, err := url.Parse(c.GatekeeperAddress)
 	if err != nil {
 		return "", err
 	}
@@ -79,7 +97,7 @@ func requestTempToken(taskID string) (string, error) {
 		return "", err
 	}
 
-	gkResp, err := HttpClient.Post(gkAddr.String(), "application/json", bytes.NewReader(gkReq))
+	gkResp, err := c.HttpClient.Post(gkAddr.String(), "application/json", bytes.NewReader(gkReq))
 	if err != nil {
 		return "", err
 	}
@@ -97,8 +115,8 @@ func requestTempToken(taskID string) (string, error) {
 	return gkTokResp.Token, nil
 }
 
-func requestPermToken(tempToken string) (string, error) {
-	vaultAddr, err := url.Parse(VaultAddress)
+func (c *Client) requestPermToken(tempToken string) (string, error) {
+	vaultAddr, err := url.Parse(c.VaultAddress)
 	if err != nil {
 		return "", err
 	}
@@ -110,7 +128,7 @@ func requestPermToken(tempToken string) (string, error) {
 	}
 	req.Header.Add("X-Vault-Token", tempToken)
 
-	vaultResp, err := HttpClient.Do(req)
+	vaultResp, err := c.HttpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -126,8 +144,4 @@ func requestPermToken(tempToken string) (string, error) {
 	}
 
 	return cubbyholeSecret.Data.WrappedSecret.Token, nil
-}
-
-func EnvRequestVaultToken() (string, error) {
-	return RequestVaultToken(os.Getenv("MESOS_TASK_ID"))
 }
