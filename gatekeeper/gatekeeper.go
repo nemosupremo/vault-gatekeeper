@@ -24,18 +24,9 @@ var DefaultClient *Client
 var ErrNoTaskId = errors.New("No task id provided.")
 
 func init() {
-	DefaultClient = new(Client)
-	DefaultClient.VaultAddress = os.Getenv("VAULT_ADDR")
-	DefaultClient.GatekeeperAddress = os.Getenv("GATEKEEPER_ADDR")
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
 	capath := os.Getenv("VAULT_CAPATH")
 	cacert := os.Getenv("VAULT_CACERT")
-
-	if b, err := strconv.ParseBool(os.Getenv("VAULT_SKIP_VERIFY")); err == nil && b {
-		tr.TLSClientConfig.InsecureSkipVerify = true
-	}
+	var rootCas *x509.CertPool
 
 	if capath != "" || cacert != "" {
 		LoadCA := func() (*x509.CertPool, error) {
@@ -47,12 +38,19 @@ func init() {
 			panic("invariant violation")
 		}
 		if certs, err := LoadCA(); err == nil {
-			tr.TLSClientConfig.RootCAs = certs
+			rootCas = certs
 		} else {
 			fmt.Fprintf(os.Stderr, "Gatekeeper: Failed to read client certs. Error: %v\n", err)
 		}
 	}
-	DefaultClient.HttpClient = &http.Client{Transport: tr}
+
+	var err error
+	DefaultClient, err = NewClient(os.Getenv("VAULT_ADDR"), os.Getenv("GATEKEEPER_ADDR"), rootCas)
+	if err == nil {
+		if b, err := strconv.ParseBool(os.Getenv("VAULT_SKIP_VERIFY")); err == nil && b {
+			DefaultClient.InsecureSkipVerify(true)
+		}
+	}
 }
 
 func RequestVaultToken(taskId string) (string, error) {
@@ -61,6 +59,32 @@ func RequestVaultToken(taskId string) (string, error) {
 
 func EnvRequestVaultToken() (string, error) {
 	return DefaultClient.RequestVaultToken(os.Getenv("MESOS_TASK_ID"))
+}
+
+func NewClient(vaultAddress, gatekeeperAddress string, certPool *x509.CertPool) (*Client, error) {
+	client := new(Client)
+	client.VaultAddress = vaultAddress
+	client.GatekeeperAddress = gatekeeperAddress
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{},
+	}
+	if certPool != nil {
+		tr.TLSClientConfig.RootCAs = certPool
+	}
+	client.HttpClient = &http.Client{Transport: tr}
+	if _, err := url.Parse(client.GatekeeperAddress); err != nil {
+		return nil, err
+	}
+	if _, err := url.Parse(client.VaultAddress); err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+func (c *Client) InsecureSkipVerify(skipVerify bool) {
+	if _, ok := c.HttpClient.Transport.(*http.Transport); ok {
+		c.HttpClient.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = skipVerify
+	}
 }
 
 func (c *Client) RequestVaultToken(taskId string) (string, error) {
