@@ -35,14 +35,15 @@ var config struct {
 		CaPath     string
 		GkPolicies string
 	}
-	SelfRecreate  bool
-	ListenAddress string
-	TlsCert       string
-	TlsKey        string
-	Mesos         string
-	MaxTaskLife   time.Duration
-	AppIdAuth     AppIdUnsealer
-	CubbyAuth     CubbyUnsealer
+	SelfRecreate     bool
+	ListenAddress    string
+	TlsCert          string
+	TlsKey           string
+	Mesos            string
+	MaxTaskLife      time.Duration
+	AppIdAuth        AppIdUnsealer
+	CubbyAuth        CubbyUnsealer
+	WrappedTokenAuth WrappedTokenUnsealer
 }
 
 var state struct {
@@ -87,6 +88,8 @@ func init() {
 
 	flag.StringVar(&config.CubbyAuth.TempToken, "cubby-token", defaultEnvVar("CUBBY_TOKEN", ""), "Temporary vault authorization token that has a cubbyhole secret in CUBBY_PATH that contains the permanent vault token.")
 	flag.StringVar(&config.CubbyAuth.Path, "cubby-path", defaultEnvVar("CUBBY_PATH", "/vault-token"), "Path to key in cubbyhole. By default this is /vault-token.")
+
+	flag.StringVar(&config.WrappedTokenAuth.TempToken, "wrapped-token-auth", defaultEnvVar("WRAPPED_TOKEN_AUTH", ""), "Temporary vault authorization token that has a wrapped permanent vault token.")
 
 	flag.StringVar(&config.AppIdAuth.AppId, "auth-appid", defaultEnvVar("APP_ID", ""), "Vault App Id for authenication. (Overrides the APP_ID environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdMethod, "auth-userid-method", defaultEnvVar("USER_ID_METHOD", ""), "Vault User Id authenication method (either 'mac' or 'file'). (Overrides the USER_ID_METHOD environment variable if set.)")
@@ -342,6 +345,14 @@ func main() {
 			os.Exit(1)
 		}
 		log.Println("Unseal successful with token provided by Cubbyhole.")
+	} else if config.WrappedTokenAuth.TempToken != "" {
+		log.Println("Attempting to unseal with Wrapped Token...")
+		if err := unseal(config.WrappedTokenAuth); err != nil {
+			log.Println("Failed to unseal using Wrapped Token. Please make sure the Wrapped Token auth is correctly setup.")
+			log.Println("Error:", err)
+			os.Exit(1)
+		}
+		log.Println("Unseal successful with Wrapped Token.")
 	} else if config.AppIdAuth.AppId != "" {
 		log.Println("Attempting to unseal with provided APP ID credentials, using user_id from '" + config.AppIdAuth.UserIdMethod + "'...")
 		if err := unseal(config.AppIdAuth); err != nil {

@@ -56,6 +56,8 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `CUBBY_PATH` | `-cubby-path` - Path to key in cubbyhole. By default this is `/vault-token`.
 
+`WRAPPED_TOKEN_AUTH` | `-wrapped-token-auth` - Temporary vault authorization token that has a wrapped permanent vault token.
+
 `APP_ID` | `-auth-appid` - Use the `app-id` authorization method with this app id.
 
 `USER_ID_METHOD` | `-auth-userid-method` - With the `app-id` authorization method, this argument decides how VGM should generate the user id. Valid values are `mac` and `file`.
