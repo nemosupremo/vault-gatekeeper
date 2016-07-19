@@ -37,6 +37,9 @@ const htmlTemplateVal = `<!DOCTYPE html>
       .active-form.active-cubby .visible-cubby {
         display: block;
       }
+      .active-form.active-wrapped-token .visible-wrapped-token {
+        display: block;
+      }
       .status-unsealed {
         display: {{.StatusUnsealed}};
       }
@@ -85,6 +88,7 @@ const htmlTemplateVal = `<!DOCTYPE html>
                 <option value="github">GitHub</option>
                 <option value="userpass">Username &amp; Password</option>
                 <option value="cubby">Cubby Method</option>
+                <option value="wrapped-token">Wrapped Token Method</option>
                 <option value="token">Token</option>
               </select>
             </div>
@@ -148,6 +152,12 @@ const htmlTemplateVal = `<!DOCTYPE html>
               <div class="form-group">
                 <label for="cubby_path">Cubby Method: Path</label>
                 <input type="password" class="form-control" id="cubby_path" name="cubby_path" placeholder="/vault-token">
+              </div>
+            </div>
+            <div class="form-section visible-wrapped-token">
+              <div class="form-group">
+                <label for="wrapped_token">Wrapped Token Method: Temp Token</label>
+                <input type="text" class="form-control" id="wrapped_token" name="wrapped_token">
               </div>
             </div>
             <div class="text-right">

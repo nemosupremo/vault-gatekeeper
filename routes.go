@@ -91,6 +91,8 @@ func Unseal(c *gin.Context) {
 		case "cubby":
 			request.Token = c.Request.FormValue("cubby_token")
 			request.CubbyPath = c.Request.FormValue("cubby_path")
+		case "wrapped-token":
+			request.Token = c.Request.FormValue("wrapped_token")
 		default:
 			c.JSON(400, struct {
 				Status string `json:"status"`
@@ -139,6 +141,10 @@ func Unseal(c *gin.Context) {
 		unsealer = CubbyUnsealer{
 			TempToken: request.Token,
 			Path:      request.CubbyPath,
+		}
+	case "wrapped-token":
+		unsealer = WrappedTokenUnsealer{
+			TempToken: request.Token,
 		}
 	default:
 		c.JSON(400, struct {
