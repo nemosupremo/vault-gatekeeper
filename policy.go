@@ -60,7 +60,7 @@ func (p policies) Load(authToken string) error {
 				}
 				return nil
 			} else {
-				return policyLoadError{err}
+				return policyLoadError{fmt.Errorf("There was an error decoding policy from vault. This can occur when using vault-cli to save the policy json, as vault-cli saves it as a string rather than a json object.")}
 			}
 		default:
 			var e vaultError
