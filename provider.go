@@ -96,14 +96,15 @@ func createTokenPair(token string, p *policy) (string, error) {
 	}
 
 	permTokenOpts := struct {
-		Ttl      string            `json:"ttl,omitempty"`
-		Policies []string          `json:"policies"`
-		Meta     map[string]string `json:"meta,omitempty"`
-		NumUses  int               `json:"num_uses"`
-		NoParent bool              `json:"no_parent"`
-	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true}
+		Ttl       string            `json:"ttl,omitempty"`
+		Policies  []string          `json:"policies"`
+		Meta      map[string]string `json:"meta,omitempty"`
+		NumUses   int               `json:"num_uses"`
+		NoParent  bool              `json:"no_parent"`
+		Renewable bool              `json:"renewable"`
+	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true, true}
 
-	return createWrappedToken(token, permTokenOpts, 10 * time.Minute)
+	return createWrappedToken(token, permTokenOpts, 10*time.Minute)
 }
 
 func Provide(c *gin.Context) {
