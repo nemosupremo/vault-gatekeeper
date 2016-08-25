@@ -328,6 +328,7 @@ func main() {
 	r.POST("/seal", Seal)
 	r.POST("/unseal", Unseal)
 	r.POST("/token", Provide)
+	r.POST("/policies/reload", ReloadPolicies)
 
 	if os.Getenv("VAULT_TOKEN") != "" {
 		log.Println("VAULT_TOKEN detected in environment, unsealing with token...")
