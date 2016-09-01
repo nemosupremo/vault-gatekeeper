@@ -270,3 +270,59 @@ func (t CubbyUnsealer) Token() (string, error) {
 func (t CubbyUnsealer) Name() string {
 	return "cubby"
 }
+
+type WrappedTokenUnsealer struct {
+	TempToken string
+}
+
+var errInvalidWrappedToken = errors.New("Invalid wrapped token.")
+
+func (t WrappedTokenUnsealer) Token() (string, error) {
+	resp, err := VaultRequest{
+		goreq.Request{
+			Uri:             vaultPath("/v1/cubbyhole/response", ""),
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+		}.WithHeader("X-Vault-Token", t.TempToken),
+	}.Do()
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		var e vaultError
+		e.Code = resp.StatusCode
+
+		if err := resp.Body.FromJsonTo(&e); err != nil {
+			e.Errors = []string{"communication error."}
+			return "", e
+
+		}
+
+		return "", e
+	}
+
+	vaultWrappedResp := struct {
+		Data struct {
+			WrappedSecret struct {
+	    		Token string `json:"token"`
+			} `json:"response"`
+		} `json:"data"`
+	}{}
+
+	if err := resp.Body.FromJsonTo(&vaultWrappedResp); err != nil {
+		return "", err
+
+	}
+
+	if vaultWrappedResp.Data.WrappedSecret.Token == "" {
+		return "", errInvalidWrappedToken
+	}
+
+	return TokenUnsealer{vaultWrappedResp.Data.WrappedSecret.Token}.Token()
+}
+
+func (t WrappedTokenUnsealer) Name() string {
+	return "wrapped-token"
+}
