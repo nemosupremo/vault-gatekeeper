@@ -1,6 +1,8 @@
 vault-gatekeeper-mesos
 =========
 
+[![Build Status](https://travis-ci.org/ChannelMeter/vault-gatekeeper-mesos.svg?branch=master)](https://travis-ci.org/ChannelMeter/vault-gatekeeper-mesos)
+
 Vault-Gatekeeper-Mesos (VGM) is a small service for delivering [Vault](https://www.vaultproject.io/) token
 to other services who's lifecycles are managed by [Mesos](https://mesos.apache.org) or one of it's frameworks
 (such as [Marathon](https://mesosphere.github.io/marathon/)).
