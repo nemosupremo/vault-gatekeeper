@@ -83,7 +83,7 @@ func createWrappedToken(token string, opts interface{}, wrapTTL time.Duration) (
 	}
 
 	if t.WrapInfo.Token == "" {
-		return "",  errors.New("Request for wrapped token did not return wrapped response")
+		return "", errors.New("Request for wrapped token did not return wrapped response")
 	}
 
 	return t.WrapInfo.Token, nil
@@ -130,7 +130,7 @@ func Provide(c *gin.Context) {
 	}
 
 	var reqParams struct {
-		TaskId    string `json:"task_id"`
+		TaskId string `json:"task_id"`
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
