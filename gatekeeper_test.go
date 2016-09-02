@@ -204,13 +204,13 @@ func TestUserPassUnseal(t *testing.T) {
 }
 
 func TestCubbyUnseal(t *testing.T) {
-	// Deprecated
+	t.Skip("Deprecated")
 }
 
 func TestAppIdUnseal(t *testing.T) {
-	// TODO
+	t.Skip("TODO")
 }
 
 func TestGitHubUnseal(t *testing.T) {
-	// TODO
+	t.Skip("TODO")
 }
