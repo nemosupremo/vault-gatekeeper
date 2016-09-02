@@ -108,7 +108,6 @@ func TestMain(m *testing.M) {
 			//log.Printf("Listening and serving on '%s'...", config.ListenAddress)
 			if err := r.Run(config.ListenAddress); err != nil {
 				panic("Failed to start server. Error: " + err.Error())
-				os.Exit(1)
 			}
 		}()
 	}

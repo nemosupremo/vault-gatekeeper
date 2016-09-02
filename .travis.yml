@@ -3,6 +3,12 @@ language: go
 sudo: required
 dist: trusty
 
+before_install:
+  - cd $HOME
+  - mv $HOME/gopath/src/github.com/ChannelMeter $HOME/gopath/src/github.com/channelmeter
+  - TRAVIS_BUILD_DIR=$HOME/gopath/src/github.com/channelmeter/vault-gatekeeper-mesos
+  - cd $HOME/gopath/src/github.com/channelmeter/vault-gatekeeper-mesos
+
 #cache:
 #  directories:
 
@@ -19,12 +25,13 @@ go:
 
 install:
   - curl -sSL https://minimesos.org/install | sh
+  - go get .
 
 script:
   - set -e
 # TODO: reenable
 #  - minimesos up
-  - docker run -d -p 8200:8200 --hostname vault --name vault sjourdan/vault
+  - docker run -d -p 8200:8200 --hostname vault --name vault vault server -dev -dev-root-token-id=vault-gatekeeper-test-token-id
   - bash integration.sh
   - go vet .
 

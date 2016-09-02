@@ -59,7 +59,7 @@ var state struct {
 	sync.RWMutex
 
 	// TODO: Remove this when we can incorporate Mesos in testing environment
-	testingTaskId string `json:"-"`
+	testingTaskId string
 }
 
 var errAlreadyUnsealed = errors.New("Already unsealed.")
