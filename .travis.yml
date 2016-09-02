@@ -22,13 +22,15 @@ install:
 
 script:
   - set -e
-  - minimesos up
+# TODO: reenable
+#  - minimesos up
   - docker run -d -p 8200:8200 --hostname vault --name vault sjourdan/vault
   - bash integration.sh
   - go vet .
 
 after_script:
-  - minimesos destroy
+# TODO: reenable
+#  - minimesos destroy
   - docker stop vault
   - docker rm vault
 
