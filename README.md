@@ -13,6 +13,8 @@ by Vault internally to write the `perm` token into it's own Cubbyhole at the pat
 can use that token to retrieve the `perm` token. VGM can also ensure the correct policies are set on the `perm` token by using an internal configuration
 based on the task's name in Mesos.
 
+**Requires Vault 0.6.0 or greater**
+
 ## Deploying
 
 You can grab a binary from the releases or deploy the docker image [channelmeter/vault-gatekeeper-mesos](https://hub.docker.com/r/channelmeter/vault-gatekeeper-mesos/). When deploying VGM
