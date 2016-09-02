@@ -159,6 +159,20 @@ func Provide(c *gin.Context) {
 			}
 			return task, err
 		}
+
+		// TODO: Remove this when we can incorporate Mesos in testing environment
+		if reqParams.TaskId == state.testingTaskId && state.testingTaskId != "" {
+			gMT = func(taskId string) (mesosTask, error) {
+				return mesosTask{
+					Statuses: []struct {
+						State     string  `json:"state"`
+						Timestamp float64 `json:"timestamp"`
+					}{{"RUNNING", float64(time.Now().UnixNano()) / float64(1000000000)}},
+					Id:   reqParams.TaskId,
+					Name: "Test",
+				}, nil
+			}
+		}
 		if task, err := gMT(reqParams.TaskId); err == nil {
 			if len(task.Statuses) == 0 {
 				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)

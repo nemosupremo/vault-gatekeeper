@@ -57,6 +57,9 @@ var state struct {
 	Token    string        `json:"-"`
 	OnSealed chan struct{} `json:"-"`
 	sync.RWMutex
+
+	// TODO: Remove this when we can incorporate Mesos in testing environment
+	testingTaskId string `json:"-"`
 }
 
 var errAlreadyUnsealed = errors.New("Already unsealed.")

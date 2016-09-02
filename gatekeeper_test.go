@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/franela/goreq"
+	"github.com/gin-gonic/gin"
 	"os"
 	"testing"
 )
@@ -34,6 +35,7 @@ path "secret/gatekeeper" {
 	        "ttl":1500
 	    }
 	}`
+	gkListenAddress = "127.0.0.1:8765"
 )
 
 func TestMain(m *testing.M) {
@@ -60,7 +62,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 	} else {
-		panic("Could not reach vault server: %s" + err.Error())
+		panic("Could not reach vault server: " + err.Error())
 	}
 
 	r, err = VaultRequest{goreq.Request{
@@ -89,6 +91,26 @@ func TestMain(m *testing.M) {
 		}
 	} else {
 		panic("Could not reach vault server: %s" + err.Error())
+	}
+
+	{
+		config.ListenAddress = gkListenAddress
+		r := gin.Default()
+		r.SetHTMLTemplate(statusPage)
+		r.GET("/", Status)
+		r.GET("/status.json", Status)
+		r.POST("/seal", Seal)
+		r.POST("/unseal", Unseal)
+		r.POST("/token", Provide)
+		r.POST("/policies/reload", ReloadPolicies)
+
+		go func() {
+			//log.Printf("Listening and serving on '%s'...", config.ListenAddress)
+			if err := r.Run(config.ListenAddress); err != nil {
+				panic("Failed to start server. Error: " + err.Error())
+				os.Exit(1)
+			}
+		}()
 	}
 
 	os.Exit(m.Run())
