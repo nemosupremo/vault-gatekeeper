@@ -303,24 +303,27 @@ func (t WrappedTokenUnsealer) Token() (string, error) {
 		return "", e
 	}
 
-	vaultWrappedResp := struct {
-		Data struct {
-			WrappedSecret struct {
-	    		Token string `json:"token"`
-			} `json:"response"`
-		} `json:"data"`
-	}{}
+	var vaultWrappedResp VaultWrappedResponse
 
 	if err := resp.Body.FromJsonTo(&vaultWrappedResp); err != nil {
 		return "", err
-
 	}
 
-	if vaultWrappedResp.Data.WrappedSecret.Token == "" {
+	secretResp := struct {
+		Auth struct {
+			ClientToken string `json:"client_token"`
+		} `json:"auth"`
+	}{}
+
+	if err := vaultWrappedResp.Unwrap(&secretResp); err != nil {
+		return "", err
+	}
+
+	if secretResp.Auth.ClientToken == "" {
 		return "", errInvalidWrappedToken
 	}
 
-	return TokenUnsealer{vaultWrappedResp.Data.WrappedSecret.Token}.Token()
+	return TokenUnsealer{secretResp.Auth.ClientToken}.Token()
 }
 
 func (t WrappedTokenUnsealer) Name() string {
