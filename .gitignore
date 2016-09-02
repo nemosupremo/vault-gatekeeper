@@ -29,3 +29,5 @@ dist/release/
 *.exe
 vault-gatekeeper-mesos
 vltgatekeeper
+vault
+.minimesos

@@ -83,7 +83,7 @@ func createWrappedToken(token string, opts interface{}, wrapTTL time.Duration) (
 	}
 
 	if t.WrapInfo.Token == "" {
-		return "",  errors.New("Request for wrapped token did not return wrapped response")
+		return "", errors.New("Request for wrapped token did not return wrapped response")
 	}
 
 	return t.WrapInfo.Token, nil
@@ -130,7 +130,7 @@ func Provide(c *gin.Context) {
 	}
 
 	var reqParams struct {
-		TaskId    string `json:"task_id"`
+		TaskId string `json:"task_id"`
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
@@ -158,6 +158,20 @@ func Provide(c *gin.Context) {
 				task, err = getMesosTask(taskId)
 			}
 			return task, err
+		}
+
+		// TODO: Remove this when we can incorporate Mesos in testing environment
+		if reqParams.TaskId == state.testingTaskId && state.testingTaskId != "" {
+			gMT = func(taskId string) (mesosTask, error) {
+				return mesosTask{
+					Statuses: []struct {
+						State     string  `json:"state"`
+						Timestamp float64 `json:"timestamp"`
+					}{{"RUNNING", float64(time.Now().UnixNano()) / float64(1000000000)}},
+					Id:   reqParams.TaskId,
+					Name: "Test",
+				}, nil
+			}
 		}
 		if task, err := gMT(reqParams.TaskId); err == nil {
 			if len(task.Statuses) == 0 {
