@@ -40,14 +40,12 @@ type gkTokenResp struct {
 	Error  string `json:"error"`
 }
 
-type cubbyholeSecret struct {
-	Data wrappedResponseData `json:"data"`
+type vaultWrappedResponse struct {
+	Data struct {
+		WrappedSecret string `json:"response"`
+	} `json:"data"`
 }
 
-type wrappedResponseData struct {
-	WrappedSecret vaultSecretData `json:"response"`
-}
-
-type vaultSecretData struct {
-	Token string `json:"token"`
+func (vr *vaultWrappedResponse) Unwrap(v interface{}) error {
+	return json.Unmarshal([]byte(vr.Data.WrappedSecret), v)
 }

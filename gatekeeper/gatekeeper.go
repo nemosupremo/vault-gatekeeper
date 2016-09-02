@@ -162,10 +162,21 @@ func (c *Client) requestPermToken(tempToken string) (string, error) {
 		return "", err
 	}
 
-	cubbyholeSecret := &cubbyholeSecret{}
-	if err := json.NewDecoder(vaultResp.Body).Decode(cubbyholeSecret); err != nil {
+	var vaultWrappedResp vaultWrappedResponse
+
+	if err := json.NewDecoder(vaultResp.Body).Decode(&vaultWrappedResp); err != nil {
 		return "", err
 	}
 
-	return cubbyholeSecret.Data.WrappedSecret.Token, nil
+	secretResp := struct {
+		Auth struct {
+			ClientToken string `json:"client_token"`
+		} `json:"auth"`
+	}{}
+
+	if err := vaultWrappedResp.Unwrap(&secretResp); err != nil {
+		return "", err
+	}
+
+	return secretResp.Auth.ClientToken, nil
 }
