@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/franela/goreq"
+	"log"
 	"path"
 )
 
@@ -25,6 +26,12 @@ type policies map[string]*policy
 
 var defaultPolicy = &policy{
 	Ttl: 21600,
+}
+var defaultPolicies = map[string]*policy{
+	"*": &policy{
+		Policies: []string{"default"},
+		Ttl:      21600,
+	},
 }
 var activePolicies = make(policies)
 
@@ -62,6 +69,15 @@ func (p policies) Load(authToken string) error {
 			} else {
 				return policyLoadError{fmt.Errorf("There was an error decoding policy from vault. This can occur when using vault-cli to save the policy json, as vault-cli saves it as a string rather than a json object.")}
 			}
+		case 404:
+			log.Printf("There was no policy in the secret backend at %v. Tokens created will have the default vault policy.", config.Vault.GkPolicies)
+			for k, _ := range p {
+				delete(p, k)
+			}
+			for k, v := range defaultPolicies {
+				p[k] = v
+			}
+			return nil
 		default:
 			var e vaultError
 			e.Code = r.StatusCode
