@@ -179,7 +179,7 @@ Reload the gatekeeper policies from the Vault secret path (`GATE_POLICIES` | `-p
 
 Response -
 
-```jsong
+```json
 {
 	"ok":true,
 	"status":"Either Sealed or Unsealed",
