@@ -108,6 +108,8 @@ You will have to use the Vault API in order to set th epolicies to your backend.
 $ curl -X POST -H "X-Vault-Token: <MY TOKEN>" -H "Content-Type: application/json" -d @policy.json http://vault/v1/secret/gatekeeper
 ```
 
+If you update the policy secret, you will need to restart VGM or reload the policies via the `/policies/reload` API (see below) to apply the changes.
+
 ## API
 
 #### `GET` **/status.json**
@@ -160,6 +162,20 @@ Parameters (`application/json`) -
 * `user_id_path` - See `USER_ID_PATH` in *Vault Startup Authorization Methods*
 * `user_id_hash` - See `USER_ID_HASH` in *Vault Startup Authorization Methods*
 * `user_id_salt` - See `USER_ID_SALT` in *Vault Startup Authorization Methods*
+
+Response -
+
+```json
+{
+	"ok":true,
+	"status":"Either Sealed or Unsealed",
+	"error":"error if any"
+}
+```
+
+#### `POST` **/policies/reload**
+
+Reload the gatekeeper policies from the Vault secret path (`GATE_POLICIES` | `-policies`). Do this after updating the policy secret in the Vault.
 
 Response -
 
