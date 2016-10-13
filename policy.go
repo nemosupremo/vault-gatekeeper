@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/franela/goreq"
+	"github.com/ryanuber/go-glob"
 	"log"
 	"path"
 	"sort"
-	"github.com/ryanuber/go-glob"
 )
 
 type policyLoadError struct {
@@ -29,16 +29,16 @@ type policies map[string]*policy
 // Type and methods to sort a list of policy keys
 // by descending length of key. Implements sort.Interface
 type policyKeyList []string
+
 func (k policyKeyList) Len() int {
 	return len(k)
 }
 func (k policyKeyList) Swap(i, j int) {
-	k[i], k[j]  = k[j], k[i]
+	k[i], k[j] = k[j], k[i]
 }
 func (k policyKeyList) Less(i, j int) bool {
 	return len(k[i]) > len(k[j])
 }
-
 
 var defaultPolicy = &policy{
 	Ttl: 21600,
@@ -61,14 +61,14 @@ func (p policies) Get(key string) *policy {
 	// Order the keys in descending order of length
 	// so that "foobar*" takes precedence over "foo*"
 	// Now organize the keys by length
-	policyKeys := make(policyKeyList, 0, )
+	policyKeys := make(policyKeyList, 0)
 	for k := range p {
 		policyKeys = append(policyKeys, k)
 	}
 	sort.Sort(policyKeys)
 
 	// Iterate over the keys to find one that matches by glob
-	for _,pattern := range policyKeys {
+	for _, pattern := range policyKeys {
 		if glob.Glob(pattern, key) {
 			return p[pattern]
 		}
