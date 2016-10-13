@@ -61,9 +61,11 @@ func (p policies) Get(key string) *policy {
 	// Order the keys in descending order of length
 	// so that "foobar*" takes precedence over "foo*"
 	// Now organize the keys by length
-	policyKeys := make(policyKeyList, 0)
+	policyKeys := make(policyKeyList, len(p))
+	i := 0
 	for k := range p {
-		policyKeys = append(policyKeys, k)
+		policyKeys[i] = k
+		i++
 	}
 	sort.Sort(policyKeys)
 
