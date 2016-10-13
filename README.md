@@ -83,14 +83,26 @@ information on the different unseal methods.
 
 ## Policies
 
-VGM will create token's with given policies by using the data in it's `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
+VGM will create token's with given policies by using the data in its `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
 A `policies` config is a simple json structure, with the key name being the Mesos task name (with the Marathon framework this is your app name) and the value being select
-token options. A special '*' key is used as a catch all.
+token options. Policy names support glob-style matching, with the longest pattern taking priority. .
 
 ```json
 {
 	"web-server":{
 		"policies":["web"],
+		"meta":{"foo":"bar"},
+		"ttl":3000,
+		"num_uses":0,
+	},
+	"ChronosTask:my_special_task":{
+		"policies":["special_task"],
+		"meta":{"foo":"bar"},
+		"ttl":3000,
+		"num_uses":0,
+	},
+	"ChronosTask:*":{
+		"policies":["batch"],
 		"meta":{"foo":"bar"},
 		"ttl":3000,
 		"num_uses":0,
@@ -101,6 +113,8 @@ token options. A special '*' key is used as a catch all.
 	}
 }
 ```
+
+In the above, any task starting with `ChronosTask:` will get the `batch` policy except `ChronosTask:my_special_task`, which will get `special_task`.
 
 You will have to use the Vault API in order to set th epolicies to your backend. Assuming your policy is saved as `policy.json`, here's how to save that information using cURL.
 
