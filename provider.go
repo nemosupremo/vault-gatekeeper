@@ -60,11 +60,11 @@ func createWrappedToken(token string, opts interface{}, wrapTTL time.Duration) (
 			RedirectHeaders: true,
 		}.WithHeader("X-Vault-Token", token).WithHeader("X-Vault-Wrap-TTL", wrapTTLSeconds),
 	}.Do()
-	defer r.Body.Close()
 
 	if err != nil {
 		return "", err
 	}
+	defer r.Body.Close()
 
 	if r.StatusCode != 200 {
 		var e vaultError
