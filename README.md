@@ -7,7 +7,7 @@ Vault-Gatekeeper-Mesos (VGM) is a small service for delivering [Vault](https://w
 to other services who's lifecycles are managed by [Mesos](https://mesos.apache.org) or one of it's frameworks
 (such as [Marathon](https://mesosphere.github.io/marathon/)).
 
-VGM takes the Cubbyhole Authenication approach outlined by Jeff Mitchell on [Vault Blog](https://www.hashicorp.com/blog/vault-cubbyhole-principles.html).
+VGM takes the Cubbyhole Authentication approach outlined by Jeff Mitchell on [Vault Blog](https://www.hashicorp.com/blog/vault-cubbyhole-principles.html).
 Specifically Vault response wrapping is used as outlined in the [Vault documentation](https://www.vaultproject.io/docs/concepts/response-wrapping.html).
 In short, a service will request a vault token from VGM supplying its Mesos task id. VGM will then check with Mesos to ensure that the task has been
 recently started, and if so, request the creation of 2 tokens (`temp` and `perm`). The `temp` token, which can only be used twice, will be first used
@@ -168,8 +168,8 @@ Parameters (`application/json`) -
 * `type` - One of `token`, `userpass`, `app-id`, `github`, `cubby`
 * `token` - Vault Authorization token if `type` is `token`, Github Personal token if `type` is `github`, temp token with `{"token":"perm_token"}` in `cubby_path` if `type` is `cubby`.
 * `cubby_path` - The path in `v1/cubbyhole/` when using `cubby` authorization. Default will be `/vault-token`.
-* `username` - Username for `userpass` authenication.
-* `password` - Password for `userpass` authenication.
+* `username` - Username for `userpass` authentication.
+* `password` - Password for `userpass` authentication.
 * `app_id` - See `APP_ID` in *Vault Startup Authorization Methods*
 * `user_id_method` - See `USER_ID_METHOD` in *Vault Startup Authorization Methods*
 * `user_id_interface` - See `USER_ID_INTERFACE` in *Vault Startup Authorization Methods*

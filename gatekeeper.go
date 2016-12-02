@@ -94,10 +94,10 @@ func init() {
 
 	flag.StringVar(&config.WrappedTokenAuth.TempToken, "wrapped-token-auth", defaultEnvVar("WRAPPED_TOKEN_AUTH", ""), "Temporary vault authorization token that has a wrapped permanent vault token.")
 
-	flag.StringVar(&config.AppIdAuth.AppId, "auth-appid", defaultEnvVar("APP_ID", ""), "Vault App Id for authenication. (Overrides the APP_ID environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdMethod, "auth-userid-method", defaultEnvVar("USER_ID_METHOD", ""), "Vault User Id authenication method (either 'mac' or 'file'). (Overrides the USER_ID_METHOD environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdInterface, "auth-userid-interface", defaultEnvVar("USER_ID_INTERFACE", ""), "Network interface for 'mac' user id authenication method. (Overrides the USER_ID_INTERFACE environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdPath, "auth-userid-path", defaultEnvVar("USER_ID_PATH", ""), "File path for 'file' user id authenication method. (Overrides the USER_ID_PATH environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.AppId, "auth-appid", defaultEnvVar("APP_ID", ""), "Vault App Id for authentication. (Overrides the APP_ID environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.UserIdMethod, "auth-userid-method", defaultEnvVar("USER_ID_METHOD", ""), "Vault User Id authentication method (either 'mac' or 'file'). (Overrides the USER_ID_METHOD environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.UserIdInterface, "auth-userid-interface", defaultEnvVar("USER_ID_INTERFACE", ""), "Network interface for 'mac' user id authentication method. (Overrides the USER_ID_INTERFACE environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.UserIdPath, "auth-userid-path", defaultEnvVar("USER_ID_PATH", ""), "File path for 'file' user id authentication method. (Overrides the USER_ID_PATH environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdHash, "auth-userid-hash", defaultEnvVar("USER_ID_HASH", ""), "Hash the user id with the following algorithim (sha256, sha1, md5). The hex representation of the hash will be used. (Overrides the USER_ID_HASH environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdSalt, "auth-userid-salt", defaultEnvVar("USER_ID_SALT", ""), "If hashing, salt the hash in the format 'salt$user_id'. (Overrides the USER_ID_SALT environment variable if set.)")
 
