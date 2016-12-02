@@ -79,9 +79,9 @@ func init() {
 	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.")
 	flag.StringVar(&config.TlsKey, "tls-key", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS.")
 
-	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", ""), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
+	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", "zk://master.mesos:2181/mesos"), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
 
-	flag.StringVar(&config.Vault.Server, "vault", defaultEnvVar("VAULT_ADDR", ""), "Address to vault server. (Overrides the VAULT_ADDR environment variable if set.)")
+	flag.StringVar(&config.Vault.Server, "vault", defaultEnvVar("VAULT_ADDR", "https://vault.marathon.mesos:8200"), "Address to vault server. (Overrides the VAULT_ADDR environment variable if set.)")
 	flag.StringVar(&config.Vault.GkPolicies, "policies", defaultEnvVar("GATE_POLICIES", "/gatekeeper"), "Path to the json formatted policies configuration file on the vault generic backend.")
 	flag.BoolVar(&config.Vault.Insecure, "tls-skip-verify", func() bool {
 		b, err := strconv.ParseBool(defaultEnvVar("VAULT_SKIP_VERIFY", "0"))
