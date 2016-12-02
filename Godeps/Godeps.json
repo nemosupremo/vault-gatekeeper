@@ -1,0 +1,61 @@
+{
+	"ImportPath": "github.com/jkt628/vault-gatekeeper-mesos",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v74",
+	"Deps": [
+		{
+			"ImportPath": "github.com/channelmeter/vault-gatekeeper-mesos/gatekeeper",
+			"Comment": "0.5.3-1-g1c4eb8b",
+			"Rev": "1c4eb8b29cbde932d4dd2cc1b797201e29618419"
+		},
+		{
+			"ImportPath": "github.com/franela/goreq",
+			"Rev": "fc08df6ca2d4a0d1a5ae24739aa268863943e723"
+		},
+		{
+			"ImportPath": "github.com/gin-gonic/gin",
+			"Comment": "v1.0-2-g3900df0",
+			"Rev": "3900df04d2a88e22beaf6a2970c63648b9e1b0e1"
+		},
+		{
+			"ImportPath": "github.com/gin-gonic/gin/binding",
+			"Comment": "v1.0-2-g3900df0",
+			"Rev": "3900df04d2a88e22beaf6a2970c63648b9e1b0e1"
+		},
+		{
+			"ImportPath": "github.com/gin-gonic/gin/render",
+			"Comment": "v1.0-2-g3900df0",
+			"Rev": "3900df04d2a88e22beaf6a2970c63648b9e1b0e1"
+		},
+		{
+			"ImportPath": "github.com/golang/protobuf/proto",
+			"Rev": "98fa357170587e470c5f27d3c3ea0947b71eb455"
+		},
+		{
+			"ImportPath": "github.com/manucorporat/sse",
+			"Rev": "ee05b128a739a0fb76c7ebd3ae4810c1de808d6d"
+		},
+		{
+			"ImportPath": "github.com/ryanuber/go-glob",
+			"Comment": "v0.1",
+			"Rev": "572520ed46dbddaed19ea3d9541bdd0494163693"
+		},
+		{
+			"ImportPath": "github.com/samuel/go-zookeeper/zk",
+			"Rev": "1d7be4effb13d2d908342d349d71a284a7542693"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "541150ac4f433e755f5663eba5d888c2fa347343"
+		},
+		{
+			"ImportPath": "gopkg.in/go-playground/validator.v8",
+			"Comment": "v8.18.1",
+			"Rev": "5f57d2222ad794d0dffb07e664ea05e2ee07d60c"
+		},
+		{
+			"ImportPath": "gopkg.in/yaml.v2",
+			"Rev": "a5b47d31c556af34a302ce5d659e6fea44d90de0"
+		}
+	]
+}
