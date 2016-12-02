@@ -44,6 +44,7 @@ var config struct {
 	AppIdAuth        AppIdUnsealer
 	CubbyAuth        CubbyUnsealer
 	WrappedTokenAuth WrappedTokenUnsealer
+	Debug            bool
 }
 
 var state struct {
@@ -78,9 +79,9 @@ func init() {
 	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.")
 	flag.StringVar(&config.TlsKey, "tls-key", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS.")
 
-	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", ""), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
+	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", "zk://master.mesos:2181/mesos"), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
 
-	flag.StringVar(&config.Vault.Server, "vault", defaultEnvVar("VAULT_ADDR", ""), "Address to vault server. (Overrides the VAULT_ADDR environment variable if set.)")
+	flag.StringVar(&config.Vault.Server, "vault", defaultEnvVar("VAULT_ADDR", "https://vault.marathon.mesos:8200"), "Address to vault server. (Overrides the VAULT_ADDR environment variable if set.)")
 	flag.StringVar(&config.Vault.GkPolicies, "policies", defaultEnvVar("GATE_POLICIES", "/gatekeeper"), "Path to the json formatted policies configuration file on the vault generic backend.")
 	flag.BoolVar(&config.Vault.Insecure, "tls-skip-verify", func() bool {
 		b, err := strconv.ParseBool(defaultEnvVar("VAULT_SKIP_VERIFY", "0"))
@@ -94,10 +95,10 @@ func init() {
 
 	flag.StringVar(&config.WrappedTokenAuth.TempToken, "wrapped-token-auth", defaultEnvVar("WRAPPED_TOKEN_AUTH", ""), "Temporary vault authorization token that has a wrapped permanent vault token.")
 
-	flag.StringVar(&config.AppIdAuth.AppId, "auth-appid", defaultEnvVar("APP_ID", ""), "Vault App Id for authenication. (Overrides the APP_ID environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdMethod, "auth-userid-method", defaultEnvVar("USER_ID_METHOD", ""), "Vault User Id authenication method (either 'mac' or 'file'). (Overrides the USER_ID_METHOD environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdInterface, "auth-userid-interface", defaultEnvVar("USER_ID_INTERFACE", ""), "Network interface for 'mac' user id authenication method. (Overrides the USER_ID_INTERFACE environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdPath, "auth-userid-path", defaultEnvVar("USER_ID_PATH", ""), "File path for 'file' user id authenication method. (Overrides the USER_ID_PATH environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.AppId, "auth-appid", defaultEnvVar("APP_ID", ""), "Vault App Id for authentication. (Overrides the APP_ID environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.UserIdMethod, "auth-userid-method", defaultEnvVar("USER_ID_METHOD", ""), "Vault User Id authentication method (either 'mac' or 'file'). (Overrides the USER_ID_METHOD environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.UserIdInterface, "auth-userid-interface", defaultEnvVar("USER_ID_INTERFACE", ""), "Network interface for 'mac' user id authentication method. (Overrides the USER_ID_INTERFACE environment variable if set.)")
+	flag.StringVar(&config.AppIdAuth.UserIdPath, "auth-userid-path", defaultEnvVar("USER_ID_PATH", ""), "File path for 'file' user id authentication method. (Overrides the USER_ID_PATH environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdHash, "auth-userid-hash", defaultEnvVar("USER_ID_HASH", ""), "Hash the user id with the following algorithim (sha256, sha1, md5). The hex representation of the hash will be used. (Overrides the USER_ID_HASH environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdSalt, "auth-userid-salt", defaultEnvVar("USER_ID_SALT", ""), "If hashing, salt the hash in the format 'salt$user_id'. (Overrides the USER_ID_SALT environment variable if set.)")
 
@@ -111,6 +112,10 @@ func init() {
 	} else {
 		panic(d)
 	}
+	flag.BoolVar(&config.Debug, "debug", func() bool {
+		b, err := strconv.ParseBool(defaultEnvVar("DEBUG", "0"))
+		return err == nil && b
+	}(), "Output additional debugging information.")
 }
 
 func recreateToken(token string, policies []string, ttl int) (string, error) {
@@ -119,8 +124,7 @@ func recreateToken(token string, policies []string, ttl int) (string, error) {
 		Policies []string          `json:"policies"`
 		Meta     map[string]string `json:"meta,omitempty"`
 		NumUses  int               `json:"num_uses"`
-		NoParent bool              `json:"no_parent"`
-	}{time.Duration(time.Duration(ttl) * time.Second).String(), policies, map[string]string{"info": "auto-created"}, 0, true}
+	}{time.Duration(time.Duration(ttl) * time.Second).String(), policies, map[string]string{"info": "auto-created"}, 0}
 	if newToken, err := createToken(token, tokenOpts); err == nil {
 		state.Lock()
 		state.Token = newToken

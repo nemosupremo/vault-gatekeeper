@@ -27,6 +27,7 @@ func init() {
 	capath := os.Getenv("VAULT_CAPATH")
 	cacert := os.Getenv("VAULT_CACERT")
 	var rootCas *x509.CertPool
+	protocol := "http"
 
 	if capath != "" || cacert != "" {
 		LoadCA := func() (*x509.CertPool, error) {
@@ -39,13 +40,21 @@ func init() {
 		}
 		if certs, err := LoadCA(); err == nil {
 			rootCas = certs
+			protocol = "https"
 		} else {
 			fmt.Fprintf(os.Stderr, "Gatekeeper: Failed to read client certs. Error: %v\n", err)
 		}
 	}
 
 	var err error
-	DefaultClient, err = NewClient(os.Getenv("VAULT_ADDR"), os.Getenv("GATEKEEPER_ADDR"), rootCas)
+	var VaultAddr, GateAddr string
+	if VaultAddr = os.Getenv("VAULT_ADDR"); VaultAddr == "" {
+		VaultAddr = protocol + "://vault.marathon.mesos:8200"
+	}
+	if GateAddr = os.Getenv("GATE_ADDR"); GateAddr == "" {
+		GateAddr = protocol + "://vault-gatekeeper-mesos.marathon.mesos:9201"
+	}
+	DefaultClient, err = NewClient(VaultAddr, GateAddr, rootCas)
 	if err == nil {
 		if b, err := strconv.ParseBool(os.Getenv("VAULT_SKIP_VERIFY")); err == nil && b {
 			DefaultClient.InsecureSkipVerify(true)

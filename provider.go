@@ -17,7 +17,7 @@ var usedTaskIds = NewTtlSet()
 
 func createToken(token string, opts interface{}) (string, error) {
 	r, err := VaultRequest{goreq.Request{
-		Uri:             vaultPath("/v1/auth/token/create", ""),
+		Uri:             vaultPath("/v1/auth/token/create-orphan", ""),
 		Method:          "POST",
 		Body:            opts,
 		MaxRedirects:    10,
@@ -53,7 +53,7 @@ func createWrappedToken(token string, opts interface{}, wrapTTL time.Duration) (
 
 	r, err := VaultRequest{
 		goreq.Request{
-			Uri:             vaultPath("/v1/auth/token/create", ""),
+			Uri:             vaultPath("/v1/auth/token/create-orphan", ""),
 			Method:          "POST",
 			Body:            opts,
 			MaxRedirects:    10,
@@ -100,9 +100,8 @@ func createTokenPair(token string, p *policy) (string, error) {
 		Policies  []string          `json:"policies"`
 		Meta      map[string]string `json:"meta,omitempty"`
 		NumUses   int               `json:"num_uses"`
-		NoParent  bool              `json:"no_parent"`
 		Renewable bool              `json:"renewable"`
-	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true, true}
+	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true}
 
 	return createWrappedToken(token, permTokenOpts, 10*time.Minute)
 }
@@ -144,16 +143,10 @@ func Provide(c *gin.Context) {
 			}{string(state.Status), false, errAlreadyGivenKey.Error()})
 			return
 		}
-		/*
-			The task can start, but the task's framework may have not reported
-			that it is RUNNING back to mesos. In this case, the task will still
-			be STAGING and have a statuses length of 0.
 
-			This is a network race, so we just sleep and try again.
-		*/
 		gMT := func(taskId string) (mesosTask, error) {
 			task, err := getMesosTask(taskId)
-			for i := time.Duration(0); i < 3 && err == nil && len(task.Statuses) == 0; i++ {
+			for i := time.Duration(0); err != nil && i < 3; i++ {
 				time.Sleep((500 + 250*i) * time.Millisecond)
 				task, err = getMesosTask(taskId)
 			}
@@ -174,20 +167,9 @@ func Provide(c *gin.Context) {
 			}
 		}
 		if task, err := gMT(reqParams.TaskId); err == nil {
-			if len(task.Statuses) == 0 {
-				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
-				atomic.AddInt32(&state.Stats.Denied, 1)
-				c.JSON(403, struct {
-					Status string `json:"status"`
-					Ok     bool   `json:"ok"`
-					Error  string `json:"error"`
-				}{string(state.Status), false, errTaskNotFresh.Error()})
-				return
-			}
 			// https://github.com/apache/mesos/blob/a61074586d778d432ba991701c9c4de9459db897/src/webui/master/static/js/controllers.js#L148
-			startTime := time.Unix(0, int64(task.Statuses[0].Timestamp*1000000000))
-			if time.Now().Sub(startTime) > config.MaxTaskLife {
-				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
+			if len(task.Statuses) > 0 && time.Now().Sub(time.Unix(0, int64(task.Statuses[0].Timestamp*1000000000))) > config.MaxTaskLife {
+				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errTaskNotFresh)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(403, struct {
 					Status string `json:"status"`
@@ -209,7 +191,7 @@ func Provide(c *gin.Context) {
 					Token  string `json:"token"`
 				}{string(state.Status), true, tempToken})
 			} else {
-				log.Printf("Failed to create token pair for %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errTaskNotFresh)
+				log.Printf("Failed to create token pair for %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, err)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(500, struct {
 					Status string `json:"status"`

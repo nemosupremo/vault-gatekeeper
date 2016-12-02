@@ -12,6 +12,9 @@ type VaultRequest struct {
 }
 
 func (r VaultRequest) Do() (*goreq.Response, error) {
+	if config.Debug {
+		r.ShowDebug = true
+	}
 	resp, err := r.Request.Do()
 	for err == nil && resp.StatusCode == 307 {
 		io.Copy(ioutil.Discard, resp.Body)

@@ -79,10 +79,10 @@ const htmlTemplateVal = `<!DOCTYPE html>
         	</form>
         </div>
         <div class="col-sm-8 status-sealed">
-          <h1 style="margin-top:10px">Vault Authenication</h1>
+          <h1 style="margin-top:10px">Vault Authentication</h1>
           <form id="form" method="POST" action="/unseal">
             <div class="form-group">
-              <label for="auth_type">Authenication Type</label>
+              <label for="auth_type">Authentication Type</label>
               <select id="auth_type" class="form-control" name="auth_type">
                 <option value="app-id">App ID</option>
                 <option value="github">GitHub</option>
@@ -132,12 +132,12 @@ const htmlTemplateVal = `<!DOCTYPE html>
             </div>
             <div class="form-section visible-userpass">
               <div class="form-group">
-                <label for="username_username">Username: Username</label>
-                <input type="text" class="form-control" id="username_username" name="username_username">
+                <label for="userpass_username">Username: Username</label>
+                <input type="text" class="form-control" id="userpass_username" name="userpass_username">
               </div>
               <div class="form-group">
-                <label for="username_password">Username: Password</label>
-                <input type="password" class="form-control" id="username_password" name="username_password">
+                <label for="userpass_password">Username: Password</label>
+                <input type="password" class="form-control" id="userpass_password" name="userpass_password">
               </div>
             </div>
             <div class="form-group form-section visible-token">
