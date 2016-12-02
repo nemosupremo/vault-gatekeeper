@@ -17,7 +17,7 @@ var usedTaskIds = NewTtlSet()
 
 func createToken(token string, opts interface{}) (string, error) {
 	r, err := VaultRequest{goreq.Request{
-		Uri:             vaultPath("/v1/auth/token/create", ""),
+		Uri:             vaultPath("/v1/auth/token/create-orphan", ""),
 		Method:          "POST",
 		Body:            opts,
 		MaxRedirects:    10,
@@ -53,7 +53,7 @@ func createWrappedToken(token string, opts interface{}, wrapTTL time.Duration) (
 
 	r, err := VaultRequest{
 		goreq.Request{
-			Uri:             vaultPath("/v1/auth/token/create", ""),
+			Uri:             vaultPath("/v1/auth/token/create-orphan", ""),
 			Method:          "POST",
 			Body:            opts,
 			MaxRedirects:    10,
@@ -100,9 +100,8 @@ func createTokenPair(token string, p *policy) (string, error) {
 		Policies  []string          `json:"policies"`
 		Meta      map[string]string `json:"meta,omitempty"`
 		NumUses   int               `json:"num_uses"`
-		NoParent  bool              `json:"no_parent"`
 		Renewable bool              `json:"renewable"`
-	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true, true}
+	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true}
 
 	return createWrappedToken(token, permTokenOpts, 10*time.Minute)
 }

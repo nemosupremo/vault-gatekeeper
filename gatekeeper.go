@@ -124,8 +124,7 @@ func recreateToken(token string, policies []string, ttl int) (string, error) {
 		Policies []string          `json:"policies"`
 		Meta     map[string]string `json:"meta,omitempty"`
 		NumUses  int               `json:"num_uses"`
-		NoParent bool              `json:"no_parent"`
-	}{time.Duration(time.Duration(ttl) * time.Second).String(), policies, map[string]string{"info": "auto-created"}, 0, true}
+	}{time.Duration(time.Duration(ttl) * time.Second).String(), policies, map[string]string{"info": "auto-created"}, 0}
 	if newToken, err := createToken(token, tokenOpts); err == nil {
 		state.Lock()
 		state.Token = newToken

@@ -125,16 +125,15 @@ func TestTokenUnseal(t *testing.T) {
 func TestWrappedTokenUnseal(t *testing.T) {
 	r, err := VaultRequest{
 		goreq.Request{
-			Uri:    vaultPath("/v1/auth/token/create", ""),
+			Uri:    vaultPath("/v1/auth/token/create-orphan", ""),
 			Method: "POST",
 			Body: struct {
 				Ttl       string            `json:"ttl,omitempty"`
 				Policies  []string          `json:"policies"`
 				Meta      map[string]string `json:"meta,omitempty"`
 				NumUses   int               `json:"num_uses"`
-				NoParent  bool              `json:"no_parent"`
 				Renewable bool              `json:"renewable"`
-			}{"10s", []string{"unseal"}, nil, 0, true, true},
+			}{"10s", []string{"unseal"}, nil, 0, true},
 			MaxRedirects:    10,
 			RedirectHeaders: true,
 		}.WithHeader("X-Vault-Token", *flagVaultToken).WithHeader("X-Vault-Wrap-TTL", "10"),
