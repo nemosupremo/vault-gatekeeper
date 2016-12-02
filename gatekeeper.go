@@ -44,6 +44,7 @@ var config struct {
 	AppIdAuth        AppIdUnsealer
 	CubbyAuth        CubbyUnsealer
 	WrappedTokenAuth WrappedTokenUnsealer
+	Debug            bool
 }
 
 var state struct {
@@ -111,6 +112,10 @@ func init() {
 	} else {
 		panic(d)
 	}
+	flag.BoolVar(&config.Debug, "debug", func() bool {
+		b, err := strconv.ParseBool(defaultEnvVar("DEBUG", "0"))
+		return err == nil && b
+	}(), "Output additional debugging information.")
 }
 
 func recreateToken(token string, policies []string, ttl int) (string, error) {
