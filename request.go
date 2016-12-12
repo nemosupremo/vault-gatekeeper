@@ -12,6 +12,10 @@ type VaultRequest struct {
 }
 
 func (r VaultRequest) Do() (*goreq.Response, error) {
+	config := goreq.DefaultTransport.(*http.Transport).TLSClientConfig
+	if config != nil {
+		r.Insecure = config.InsecureSkipVerify
+	}
 	resp, err := r.Request.Do()
 	for err == nil && resp.StatusCode == 307 {
 		io.Copy(ioutil.Discard, resp.Body)
