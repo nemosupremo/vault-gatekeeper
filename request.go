@@ -5,7 +5,7 @@ import (
 	"github.com/franela/goreq"
 	"io"
 	"io/ioutil"
-  "net/http"
+	"net/http"
 )
 
 type VaultRequest struct {
