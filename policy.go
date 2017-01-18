@@ -21,7 +21,7 @@ type policy struct {
 	Policies []string          `json:"policies"`
 	Meta     map[string]string `json:"meta,omitempty"`
 	Ttl      int               `json:"ttl,omitempty"`
-	NumUses  int               `json:"num_users,omitempty"`
+	NumUses  int               `json:"num_uses,omitempty"`
 }
 
 type policies map[string]*policy
