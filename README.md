@@ -30,7 +30,7 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 ## Arguments
 
-`LISTEN_ADDR` | `-listen` - *Default: `:9091`* - The address this service should listen on.
+`LISTEN_ADDR` | `-listen` - *Default: `:9201`* - The address this service should listen on.
 
 `TLS_CERT` | `-tls-cert` - Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.
 
