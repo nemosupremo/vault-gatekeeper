@@ -207,7 +207,7 @@ func renew_worker(token string, onUnsealed <-chan struct{}) {
 						if err := renew(token, tokenInfo.Data.CreationTtl); err == nil {
 							log.Printf("Renewed token with ttl of %v.", time.Duration(tokenInfo.Data.CreationTtl)*time.Second)
 						} else {
-							log.Println("Failed to renew token. Sealing gatekeeper.")
+							log.Printf("Failed to renew token. Sealing gatekeeper. Error: %v", err)
 							seal()
 							return
 						}
