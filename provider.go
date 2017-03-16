@@ -209,7 +209,7 @@ func Provide(c *gin.Context) {
 					Token  string `json:"token"`
 				}{string(state.Status), true, tempToken})
 			} else {
-				log.Printf("Failed to create token pair for %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errTaskNotFresh)
+				log.Printf("Failed to create token pair for %s (Task Id: %s). Error: %v", remoteIp, reqParams.TaskId, err)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(500, struct {
 					Status string `json:"status"`
