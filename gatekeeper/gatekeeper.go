@@ -180,3 +180,94 @@ func (c *Client) requestPermToken(tempToken string) (string, error) {
 
 	return secretResp.Auth.ClientToken, nil
 }
+
+func (c *Client) GetStatus() (*GatekeeperStatus, error) {
+	addr, err := url.Parse(c.GatekeeperAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	addr.Path = "/status.json"
+	resp, err := c.HttpClient.Get(addr.String())
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	status := &GatekeeperStatus{}
+	if err := json.NewDecoder(resp.Body).Decode(status); err != nil {
+		return nil, err
+	}
+
+	return status, nil
+}
+
+func (c *Client) IsSealed() (bool, error) {
+	status, err := c.GetStatus()
+	if err != nil {
+		return false, err
+	}
+
+	if status.Status == "Sealed" {
+		return true, nil
+	} else if status.Status == "Unsealed" {
+		return false, nil
+	} else {
+		return false, fmt.Errorf("Gatekeeper returned unexpected response for status: %s", status.Status)
+	}
+}
+
+func (c *Client) Unseal(req *UnsealRequest) (*GatekeeperResponse, error) {
+	addr, err := url.Parse(c.GatekeeperAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	addr.Path = "/unseal"
+	reqbody, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.HttpClient.Post(addr.String(), "application/json", bytes.NewReader(reqbody))
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	status := &GatekeeperResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(status); err != nil {
+		return nil, err
+	}
+
+	if !status.OK {
+		return status, fmt.Errorf("Error from gatekeeper: %s", status.Error)
+	}
+
+	return status, nil
+}
+
+func (c *Client) ReloadPolicies() (*GatekeeperResponse, error) {
+	addr, err := url.Parse(c.GatekeeperAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	addr.Path = "/policies/reload"
+	resp, err := c.HttpClient.Post(addr.String(), "application/json", bytes.NewReader(make([]byte, 0)))
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	status := &GatekeeperResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(status); err != nil {
+		return nil, err
+	}
+
+	if !status.OK {
+		return nil, fmt.Errorf("Error from gatekeeper: %s", status.Error)
+	}
+
+	return status, nil
+}
