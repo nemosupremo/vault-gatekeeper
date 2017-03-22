@@ -186,8 +186,9 @@ func Provide(c *gin.Context) {
 			}
 			// https://github.com/apache/mesos/blob/a61074586d778d432ba991701c9c4de9459db897/src/webui/master/static/js/controllers.js#L148
 			startTime := time.Unix(0, int64(task.Statuses[0].Timestamp*1000000000))
-			if time.Now().Sub(startTime) > config.MaxTaskLife {
-				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
+			taskLife := time.Now().Sub(startTime)
+			if taskLife > config.MaxTaskLife {
+				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status) Task Life: %s", remoteIp, reqParams.TaskId, errTaskNotFresh, taskLife)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(403, struct {
 					Status string `json:"status"`
