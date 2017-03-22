@@ -12,6 +12,7 @@ import (
 )
 
 var errTaskNotFresh = errors.New("This task has been running too long to request a token.")
+var errTaskEmptyStatuses = errors.New("This task does not have any statuses.")
 var errAlreadyGivenKey = errors.New("This task has already been given a token.")
 var usedTaskIds = NewTtlSet()
 
@@ -175,13 +176,13 @@ func Provide(c *gin.Context) {
 		}
 		if task, err := gMT(reqParams.TaskId); err == nil {
 			if len(task.Statuses) == 0 {
-				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskNotFresh)
+				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskEmptyStatuses)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(403, struct {
 					Status string `json:"status"`
 					Ok     bool   `json:"ok"`
 					Error  string `json:"error"`
-				}{string(state.Status), false, errTaskNotFresh.Error()})
+				}{string(state.Status), false, errTaskEmptyStatuses.Error()})
 				return
 			}
 			// https://github.com/apache/mesos/blob/a61074586d778d432ba991701c9c4de9459db897/src/webui/master/static/js/controllers.js#L148
