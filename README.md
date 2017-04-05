@@ -88,8 +88,8 @@ See the _`POST` **/unseal**_ section for information on the different unseal met
 
 You may wish to supply VGM with a token whose permissions are narrowly restricted. The token needs at least the following permissions:
 
-     # This will give VGM permission to create tokens for named Vault roles only.
-     path "auth/token/create/*" {
+     # This will give VGM permission to create tokens with any subset of policies of its own token.
+     path "auth/token/create" {
         capabilities = ["create","update"]
      }
 	 
@@ -106,7 +106,11 @@ You may wish to supply VGM with a token whose permissions are narrowly restricte
 	 # This is whatever path you set GATE_POLICIES to (but with the initial secret/ path segment).
      path "secret/vault_gatekeeper_mesos" {
          capabilities = ["read"]
-     }	
+	 }
+
+In addition, the VGM token should have the policies that it is creating tokens for; i.e., if an application needs
+read permission to `secret/my_application/foo` then the VGM token should also have that policy, since its token
+can only create tokens with a subset of its own policies.
 
 ## Policies
 
