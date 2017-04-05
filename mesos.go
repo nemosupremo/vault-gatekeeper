@@ -63,14 +63,18 @@ var errUnknownScheme = errors.New("Unknown mesos scheme.")
 var errMesosUnreachable = errors.New("No reachable mesos masters.")
 var errNoSuchTask = errors.New("No such task.")
 
-func getMesosMaster() ([]string, error) {
+func getMesosMaster() ([]string, bool, error) {
 	var masterHosts []string
+	isSsl := false
 
 	if path, err := url.Parse(config.Mesos); err == nil {
 		switch path.Scheme {
+		case "zks":
+			isSsl = true
+			fallthrough
 		case "zk":
 			if path.Path == "" || path.Path == "/" {
-				return nil, errMesosNoPath
+				return nil, false, errMesosNoPath
 			}
 			zookeeperPath := path.Path
 			if zookeeperPath[0] != '/' {
@@ -88,37 +92,44 @@ func getMesosMaster() ([]string, error) {
 									masterHosts = []string{fmt.Sprintf("%s:%d", masterInfo.Address.Hostname, masterInfo.Address.Port)}
 									break
 								} else {
-									return nil, errMesosParseError
+									return nil, false, errMesosParseError
 
 								}
 							}
 						}
 					}
 				} else {
-					return nil, errMesosNoMaster
+					return nil, false, errMesosNoMaster
 				}
 			}
-		case "http", "https":
+		case "https":
+			isSsl = true
+			fallthrough
+		case "http":
 			masterHosts = strings.Split(path.Host, ",")
 		default:
-			return nil, errUnknownScheme
+			return nil, false, errUnknownScheme
 		}
 	} else {
 		masterHosts = strings.Split(config.Mesos, ",")
 	}
 
 	if len(masterHosts) == 0 {
-		return nil, errMesosUnreachable
+		return nil, false, errMesosUnreachable
 	}
-	return masterHosts, nil
+	return masterHosts, isSsl, nil
 }
 
 func getMesosTask(taskId string) (mesosTask, error) {
 	var state mesosState
 	var masterErr error
-	if masterHosts, err := getMesosMaster(); err == nil {
+	if masterHosts, ssl, err := getMesosMaster(); err == nil {
 		for _, host := range masterHosts {
-			if resp, err := http.Get("http://" + host + "/state.json"); err == nil {
+			protocol := "http"
+			if ssl {
+				protocol = "https"
+			}
+			if resp, err := http.Get(protocol + "://" + host + "/state.json"); err == nil {
 				defer resp.Body.Close()
 				if err := json.NewDecoder(resp.Body).Decode(&state); err == nil {
 					if state.Pid == state.Leader {
