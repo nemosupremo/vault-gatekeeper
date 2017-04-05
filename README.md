@@ -237,7 +237,7 @@ Response -
 Request a token.
 
 Parameters (`application/json`) -
-* `task_id` - The Mesos Task ID of the service.
+* `task_id` - The Mesos Task ID of the service. This is exported by Mesos to container environments in the environment variable `MESOS_TASK_ID`.
 
 Response -
 
