@@ -9,10 +9,15 @@ to other services who's lifecycles are managed by [Mesos](https://mesos.apache.o
 
 VGM takes the Cubbyhole Authenication approach outlined by Jeff Mitchell on [Vault Blog](https://www.hashicorp.com/blog/vault-cubbyhole-principles.html).
 Specifically Vault response wrapping is used as outlined in the [Vault documentation](https://www.vaultproject.io/docs/concepts/response-wrapping.html).
-In short, a service will request a vault token from VGM supplying its Mesos task id. VGM will then check with Mesos to ensure that the task has been
-recently started, and if so, request the creation of 2 tokens (`temp` and `perm`). The `temp` token, which can only be used twice, will be first used
-by Vault internally to write the `perm` token into it's own Cubbyhole at the path `response`. This `temp` token is then provided to the service which
-can use that token to retrieve the `perm` token. VGM can also ensure the correct policies are set on the `perm` token by using an internal configuration
+In short, a service will request a vault token from VGM supplying its Mesos task id. VGM will then check with Mesos to 
+ensure that the task has been recently started and that VGM has not already issued a token for that task id. If so, 
+VGM requests the creation of a response-wrapped token. Behind the scenes, Vault creates 2 tokens 
+(`temp` and `perm`). The `temp` token, which can only be used twice, will be first used
+by Vault internally to write the `perm` token into it's own Cubbyhole at the path `response`. This `temp` token is then provided to the service, which
+can use that token to retrieve the `perm` token by making a PUT request to Vault at `/sys/wrapping/unwrap` with
+the `temp` token as the value of the `X-Vault-Token` header. 
+
+VGM can also ensure the correct policies are set on the `perm` token by using an internal configuration
 based on the task's name in Mesos.
 
 **Requires Vault 0.6.0 or greater**
@@ -46,7 +51,7 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `VAULT_CAPATH` | `-ca-path` -  Path to a directory of PEM encoded CA cert files to verify the Vault server SSL certificate.
 
-`GATE_POLICIES` | `-policies` - The path on the `generic` vault backend to load policies from (See Policies section).
+`GATE_POLICIES` | `-policies` - The path on the `generic` vault backend to load policies from (See Policies section). The initial `/secret` path segment should not be included.
 
 `TASK_LIFE` | `-task-life` - *Default: `2m`* - The maximum age of a task before VGM will refuse to issue tokens for it.
 
@@ -78,12 +83,34 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 By default, VGM, like Vault, will start sealed. The `APP_ID` and `VAULT_TOKEN` arguments can be started with VGM in order to start unsealed.
 
-While VGM is sealed there are two ways to unseal it, via the API or with your browser (by just opening the url VGM is listening on). See the _`POST` **/unseal**_ section for
-information on the different unseal methods.
+While VGM is sealed there are two ways to unseal it, via the API or with your browser (by just opening the url VGM is listening on). 
+See the _`POST` **/unseal**_ section for information on the different unseal methods.
+
+You may wish to supply VGM with a token whose permissions are narrowly restricted. The token needs at least the following permissions:
+
+     # This will give VGM permission to create tokens for named Vault roles only.
+     path "auth/token/create/*" {
+        capabilities = ["create","update"]
+     }
+	 
+	 # Needed for VGM unsealing
+     path "auth/token/lookup*" {
+         capabilities = ["read"]
+     }
+
+	 # Needed so that VGM can unseal its token
+     path "auth/token/renew-self" {
+         capabilities = ["create","update"]
+     }
+
+	 # This is whatever path you set GATE_POLICIES to (but with the initial secret/ path segment).
+     path "secret/vault_gatekeeper_mesos" {
+         capabilities = ["read"]
+     }	
 
 ## Policies
 
-VGM will create token's with given policies by using the data in its `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
+VGM will create tokens with given policies by using the data in its `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
 A `policies` config is a simple json structure, with the key name being the Mesos task name (with the Marathon framework this is your app name) and the value being select
 token options. Policy names support glob-style matching, with the longest pattern taking priority. .
 
@@ -165,8 +192,8 @@ Response -
 Unseal the service.
 
 Parameters (`application/json`) -
-* `type` - One of `token`, `userpass`, `app-id`, `github`, `cubby`
-* `token` - Vault Authorization token if `type` is `token`, Github Personal token if `type` is `github`, temp token with `{"token":"perm_token"}` in `cubby_path` if `type` is `cubby`.
+* `type` - One of `wrapped-token`,`token`, `userpass`, `app-id`, `github`, `cubby`
+* `token` - Vault Authorization token if `type` is `token`, wrapped token if `type` is `wrapped-token`, Github Personal token if `type` is `github`, temp token with `{"token":"perm_token"}` in `cubby_path` if `type` is `cubby`.
 * `cubby_path` - The path in `v1/cubbyhole/` when using `cubby` authorization. Default will be `/vault-token`.
 * `username` - Username for `userpass` authenication.
 * `password` - Password for `userpass` authenication.
