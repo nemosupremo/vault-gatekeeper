@@ -280,7 +280,8 @@ var errInvalidWrappedToken = errors.New("Invalid wrapped token.")
 func (t WrappedTokenUnsealer) Token() (string, error) {
 	resp, err := VaultRequest{
 		goreq.Request{
-			Uri:             vaultPath("/v1/cubbyhole/response", ""),
+			Uri:             vaultPath("/v1/sys/wrapping/unwrap", ""),
+			Method:          "PUT",
 			MaxRedirects:    10,
 			RedirectHeaders: true,
 		}.WithHeader("X-Vault-Token", t.TempToken),
@@ -303,19 +304,13 @@ func (t WrappedTokenUnsealer) Token() (string, error) {
 		return "", e
 	}
 
-	var vaultWrappedResp VaultWrappedResponse
-
-	if err := resp.Body.FromJsonTo(&vaultWrappedResp); err != nil {
-		return "", err
-	}
-
 	secretResp := struct {
 		Auth struct {
 			ClientToken string `json:"client_token"`
 		} `json:"auth"`
 	}{}
 
-	if err := vaultWrappedResp.Unwrap(&secretResp); err != nil {
+	if err := resp.Body.FromJsonTo(&secretResp); err != nil {
 		return "", err
 	}
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/franela/goreq"
 	"io"
 	"io/ioutil"
@@ -25,14 +24,4 @@ func (r VaultRequest) Do() (*goreq.Response, error) {
 		resp, err = r.Request.Do()
 	}
 	return resp, err
-}
-
-type VaultWrappedResponse struct {
-	Data struct {
-		WrappedSecret string `json:"response"`
-	} `json:"data"`
-}
-
-func (vr *VaultWrappedResponse) Unwrap(v interface{}) error {
-	return json.Unmarshal([]byte(vr.Data.WrappedSecret), v)
 }
