@@ -90,7 +90,7 @@ You may wish to supply VGM with a token whose permissions are narrowly restricte
 
      # This will give VGM permission to create tokens with any subset of policies of its own token.
      path "auth/token/create" {
-        capabilities = ["create","update"]
+        capabilities = ["create","update","sudo"]
      }
 	 
 	 # Needed for VGM unsealing
