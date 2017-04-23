@@ -11,6 +11,16 @@ import (
 	"time"
 )
 
+type RunningTask struct {
+	Id          string
+	Name        string
+	StartTime   time.Time
+}
+
+func (t *RunningTask) Valid() bool {
+	return t != nil && t.StartTime.IsZero()
+}
+
 var errTaskNotFresh = errors.New("This task has been running too long to request a token.")
 var errTaskEmptyStatuses = errors.New("This task does not have any statuses.")
 var errAlreadyGivenKey = errors.New("This task has already been given a token.")
@@ -152,30 +162,45 @@ func Provide(c *gin.Context) {
 
 			This is a network race, so we just sleep and try again.
 		*/
-		gMT := func(taskId string) (mesosTask, error) {
+		gMT := func(taskId string) (RunningTask, error) {
 			task, err := getMesosTask(taskId)
 			for i := time.Duration(0); i < 3 && err == nil && len(task.Statuses) == 0; i++ {
 				time.Sleep((500 + 250*i) * time.Millisecond)
 				task, err = getMesosTask(taskId)
 			}
-			return task, err
+			runningTime := time.Unix(0, 0)
+			if len(task.Statuses) > 0 {
+				// https://github.com/apache/mesos/blob/a61074586d778d432ba991701c9c4de9459db897/src/webui/master/static/js/controllers.js#L148
+				runningTime = time.Unix(0, int64(task.Statuses[0].Timestamp*1000000000))
+			}
+
+			return RunningTask{
+				Id:         task.Id,
+				Name:       task.Name,
+				StartTime:  runningTime,
+			}, err
 		}
 
 		// TODO: Remove this when we can incorporate Mesos in testing environment
 		if reqParams.TaskId == state.testingTaskId && state.testingTaskId != "" {
-			gMT = func(taskId string) (mesosTask, error) {
-				return mesosTask{
-					Statuses: []struct {
-						State     string  `json:"state"`
-						Timestamp float64 `json:"timestamp"`
-					}{{"RUNNING", float64(time.Now().UnixNano()) / float64(1000000000)}},
-					Id:   reqParams.TaskId,
-					Name: "Test",
+			gMT = func(taskId string) (RunningTask, error) {
+				//return mesosTask{
+				//	Statuses: []struct {
+				//		State     string  `json:"state"`
+				//		Timestamp float64 `json:"timestamp"`
+				//	}{{"RUNNING", float64(time.Now().UnixNano()) / float64(1000000000)}},
+				//	Id:   reqParams.TaskId,
+				//	Name: "Test",
+				//}, nil
+				return RunningTask{
+					Id:         reqParams.TaskId,
+					Name:       "Test",
+					StartTime:  time.Now(),
 				}, nil
 			}
 		}
 		if task, err := gMT(reqParams.TaskId); err == nil {
-			if len(task.Statuses) == 0 {
+			if task.Valid() {
 				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskEmptyStatuses)
 				atomic.AddInt32(&state.Stats.Denied, 1)
 				c.JSON(403, struct {
@@ -186,7 +211,7 @@ func Provide(c *gin.Context) {
 				return
 			}
 			// https://github.com/apache/mesos/blob/a61074586d778d432ba991701c9c4de9459db897/src/webui/master/static/js/controllers.js#L148
-			startTime := time.Unix(0, int64(task.Statuses[0].Timestamp*1000000000))
+			startTime := task.StartTime
 			taskLife := time.Now().Sub(startTime)
 			if taskLife > config.MaxTaskLife {
 				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status) Task Life: %s", remoteIp, reqParams.TaskId, errTaskNotFresh, taskLife)

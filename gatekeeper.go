@@ -39,6 +39,7 @@ var config struct {
 	ListenAddress    string
 	TlsCert          string
 	TlsKey           string
+	Provider         string
 	Mesos            string
 	MaxTaskLife      time.Duration
 	AppIdAuth        AppIdUnsealer
@@ -77,6 +78,8 @@ func init() {
 	flag.StringVar(&config.ListenAddress, "listen", defaultEnvVar("LISTEN_ADDR", ":9201"), "Hostname and port to listen on. (Overrides the LISTEN_ADDR environment variable if set.)")
 	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.")
 	flag.StringVar(&config.TlsKey, "tls-key", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS.")
+
+	flag.StringVar(&config.Provider, "provider", defaultEnvVar("DOCKER_PROVIDER", "mesos"), "Docker runtime provider (Supports mesos, ecs or test). (Overrides the DOCKER_PROVIDER environment variable if set.)")
 
 	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", ""), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
 
