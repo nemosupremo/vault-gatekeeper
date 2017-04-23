@@ -247,7 +247,7 @@ func unseal(unsealer Unsealer) error {
 			log.Printf("Failed to load policies: %v", err)
 			return err
 		}
-		log.Printf("The gate has been unsealed with method '%s'.", unsealer.Name())
+		log.Printf("The gate has been unsealed with method '%s' using '%s' provider.", unsealer.Name(), config.Provider)
 		state.Token = token
 		state.Status = StatusUnsealed
 		state.OnSealed = make(chan struct{})
