@@ -21,6 +21,8 @@ func (t *RunningTask) Valid() bool {
 	return t != nil && t.StartTime.IsZero()
 }
 
+type Provider func(string) (RunningTask, error)
+
 var errTaskNotFresh = errors.New("This task has been running too long to request a token.")
 var errTaskEmptyStatuses = errors.New("This task does not have any statuses.")
 var errAlreadyGivenKey = errors.New("This task has already been given a token.")
@@ -163,41 +165,8 @@ func Provide(c *gin.Context) {
 
 			This is a network race, so we just sleep and try again.
 		*/
-		gMT := func(taskId string) (RunningTask, error) {
-			return RunningTask{}, errNoSupportedProvider
-		}
+		gMT := getProvider()
 
-		// TODO: Extract into dedicated .go files
-		if config.Provider == "mesos" {
-			gMT = func(taskId string) (RunningTask, error) {
-				task, err := getMesosTask(taskId)
-				for i := time.Duration(0); i < 3 && err == nil && len(task.Statuses) == 0; i++ {
-					time.Sleep((500 + 250 * i) * time.Millisecond)
-					task, err = getMesosTask(taskId)
-				}
-				runningTime := time.Unix(0, 0)
-				if len(task.Statuses) > 0 {
-					// https://github.com/apache/mesos/blob/a61074586d778d432ba991701c9c4de9459db897/src/webui/master/static/js/controllers.js#L148
-					runningTime = time.Unix(0, int64(task.Statuses[0].Timestamp * 1000000000))
-				}
-
-				return RunningTask{
-					Id:         task.Id,
-					Name:       task.Name,
-					StartTime:  runningTime,
-				}, err
-			}
-		}
-
-		if config.Provider == "test" { //|| (reqParams.TaskId == state.testingTaskId && state.testingTaskId != "") {
-			gMT = func(taskId string) (RunningTask, error) {
-				return RunningTask{
-					Id:         reqParams.TaskId,
-					Name:       "Test",
-					StartTime:  time.Now(),
-				}, nil
-			}
-		}
 		if task, err := gMT(reqParams.TaskId); err == nil {
 			if task.Valid() {
 				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v (no status)", remoteIp, reqParams.TaskId, errTaskEmptyStatuses)
@@ -268,5 +237,23 @@ func Provide(c *gin.Context) {
 			Ok     bool   `json:"ok"`
 			Error  string `json:"error"`
 		}{string(state.Status), false, err.Error()})
+	}
+}
+
+func getProvider() (Provider) {
+	if config.Provider == "mesos" {
+		return mesosProvider
+	}
+
+	if config.Provider == "ecs" {
+		return ecsProvider
+	}
+
+	if config.Provider == "test" { //|| (reqParams.TaskId == state.testingTaskId && state.testingTaskId != "") {
+		return testProvider
+	}
+
+	return func(taskId string) (RunningTask, error) {
+		return RunningTask{}, errNoSupportedProvider
 	}
 }
