@@ -135,7 +135,7 @@ func Provide(c *gin.Context) {
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
-		if usedTaskIds.Has(reqParams.TaskId) {
+		if !config.TaskMultiToken && usedTaskIds.Has(reqParams.TaskId) {
 			log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errAlreadyGivenKey)
 			atomic.AddInt32(&state.Stats.Denied, 1)
 			c.JSON(403, struct {
