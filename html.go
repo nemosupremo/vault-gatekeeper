@@ -40,6 +40,9 @@ const htmlTemplateVal = `<!DOCTYPE html>
       .active-form.active-wrapped-token .visible-wrapped-token {
         display: block;
       }
+      .active-form.active-aws .visible-aws {
+        display: block;
+      }
       .status-unsealed {
         display: {{.StatusUnsealed}};
       }
@@ -68,6 +71,7 @@ const htmlTemplateVal = `<!DOCTYPE html>
             <li class="list-group-item">Successful Requests: {{.Stats.Successful}}</li>
             <li class="list-group-item">Denied Requests: {{.Stats.Denied}}</li>
             <li class="list-group-item">Uptime: {{.Uptime}}</li>
+            <li class="list-group-item">Provider: {{.Provider}}</li>
             <li class="list-group-item">Version: {{.Version}}</li>
           </ul>
         </div>
@@ -90,6 +94,7 @@ const htmlTemplateVal = `<!DOCTYPE html>
                 <option value="cubby">Cubby Method</option>
                 <option value="wrapped-token">Wrapped Token Method</option>
                 <option value="token">Token</option>
+                <option value="aws">AWS</option>
               </select>
             </div>
             <div class="form-section visible-app-id">
@@ -158,6 +163,16 @@ const htmlTemplateVal = `<!DOCTYPE html>
               <div class="form-group">
                 <label for="wrapped_token">Wrapped Token Method: Temp Token</label>
                 <input type="text" class="form-control" id="wrapped_token" name="wrapped_token">
+              </div>
+            </div>
+            <div class="form-section visible-aws">
+              <div class="form-group">
+                <label for="aws_role">AWS: Role (Optional)</label>
+                <input type="text" class="form-control" id="aws_role" name="aws_role">
+              </div>
+              <div class="form-group">
+                <label for="aws_nonce">AWS: Nonce (Optional)</label>
+                <input type="password" class="form-control" id="aws_nonce" name="aws_nonce">
               </div>
             </div>
             <div class="text-right">

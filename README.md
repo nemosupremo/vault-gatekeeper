@@ -5,11 +5,11 @@ vault-gatekeeper-mesos
 
 Vault-Gatekeeper-Mesos (VGM) is a small service for delivering [Vault](https://www.vaultproject.io/) token
 to other services who's lifecycles are managed by [Mesos](https://mesos.apache.org) or one of it's frameworks
-(such as [Marathon](https://mesosphere.github.io/marathon/)).
+(such as [Marathon](https://mesosphere.github.io/marathon/)), or [ECS](https://aws.amazon.com/ecs/).
 
 VGM takes the Cubbyhole Authenication approach outlined by Jeff Mitchell on [Vault Blog](https://www.hashicorp.com/blog/vault-cubbyhole-principles.html).
 Specifically Vault response wrapping is used as outlined in the [Vault documentation](https://www.vaultproject.io/docs/concepts/response-wrapping.html).
-In short, a service will request a vault token from VGM supplying its Mesos task id. VGM will then check with Mesos to 
+In short, a service will request a vault token from VGM supplying its Mesos task id or ECS task arn. VGM will then check with Mesos/ECS to 
 ensure that the task has been recently started and that VGM has not already issued a token for that task id. If so, 
 VGM requests the creation of a response-wrapped token. Behind the scenes, Vault creates 2 tokens 
 (`temp` and `perm`). The `temp` token, which can only be used twice, will be first used
@@ -18,7 +18,7 @@ can use that token to retrieve the `perm` token by making a PUT request to Vault
 the `temp` token as the value of the `X-Vault-Token` header. 
 
 VGM can also ensure the correct policies are set on the `perm` token by using an internal configuration
-based on the task's name in Mesos.
+based on the task's name in Mesos/ECS.
 
 **Requires Vault 0.6.0 or greater**
 
@@ -26,7 +26,7 @@ based on the task's name in Mesos.
 
 You can grab a binary from the releases or deploy the docker image [channelmeter/vault-gatekeeper-mesos](https://hub.docker.com/r/channelmeter/vault-gatekeeper-mesos/). When deploying VGM
 you must consider how you will deliver it's Vault authorization token. To issue a token to VGM on startup you can use
-the `VAULT_TOKEN` or `APP_ID` (and accompayning `USER_ID_*`) environment variables. Otherwise VGM functions like Vault
+the `VAULT_TOKEN`, `AWS_EC2_LOGIN` or `APP_ID` (and accompayning `USER_ID_*`) environment variables. Otherwise VGM functions like Vault
 in that it starts "sealed" and it must be "unsealed". It can be unsealed via JSON API, or you can direct your browser
 to http://gate.keep.er:9201 and use the UI provided there.
 
@@ -40,6 +40,8 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 `TLS_CERT` | `-tls-cert` - Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.
 
 `TLS_KEY` | `-tls-key` - Path to TLS key. If this value is set, gatekeeper will be served over TLS.
+
+`PROVIDER` | `-provider` - Configures the underlying Docker environment provider.  Currently supports `mesos` (default), `ecs` and `test` (Test provider should only be used during testing)
 
 `MESOS_MASTER` | `-mesos` - The address of the mesos master. Can be either a zookeeper link (`zk://zoo1:2181,zoo2:2181/mesos`) or a http link to a single or multiple mesos masters (`http://leader.mesos:5050`).
 
@@ -79,9 +81,15 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `USER_ID_SALT` | `-auth-userid-salt` - When provided, the `user_id` will be hashed with `salt$user_id`.
 
+`AWS_EC2_LOGIN` | `-auth-aws-ec2` - When set to `true`, will use `aws-ec2` authorization method with `pkcs7` image signature
+
+`AWS_ROLE` | `-auth-aws-ec2-role` - When provided, the `role` will be sent to Vault as part of the `aws-ec2` authorization
+ 
+`AWS_NONCE` | `-auth-aws-ec2-nonce` - When provided, the `nonce` will be sent to Vault as part of the `aws-ec2` authorization
+
 ## Unsealing
 
-By default, VGM, like Vault, will start sealed. The `APP_ID` and `VAULT_TOKEN` arguments can be started with VGM in order to start unsealed.
+By default, VGM, like Vault, will start sealed. The `APP_ID`, `AWS_EC2_LOGIN` and `VAULT_TOKEN` arguments can be started with VGM in order to start unsealed.
 
 While VGM is sealed there are two ways to unseal it, via the API or with your browser (by just opening the url VGM is listening on). 
 See the _`POST` **/unseal**_ section for information on the different unseal methods.
@@ -114,8 +122,9 @@ can only create tokens with a subset of its own policies.
 
 ## Policies
 
-VGM will create tokens with given policies by using the data in its `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
-A `policies` config is a simple json structure, with the key name being the Mesos task name (with the Marathon framework this is your app name) and the value being select
+
+VGM will create token's with given policies by using the data in its `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
+A `policies` config is a simple json structure, with the key name being the Mesos task name (with the Marathon framework this is your app name), or ECS Task Definition name part of the ARN, and the value being select
 token options. Policy names support glob-style matching, with the longest pattern taking priority. .
 
 ```json
@@ -196,7 +205,7 @@ Response -
 Unseal the service.
 
 Parameters (`application/json`) -
-* `type` - One of `wrapped-token`,`token`, `userpass`, `app-id`, `github`, `cubby`
+* `type` - One of `wrapped-token`,`token`, `userpass`, `app-id`, `github`, `cubby`, `aws`
 * `token` - Vault Authorization token if `type` is `token`, wrapped token if `type` is `wrapped-token`, Github Personal token if `type` is `github`, temp token with `{"token":"perm_token"}` in `cubby_path` if `type` is `cubby`.
 * `cubby_path` - The path in `v1/cubbyhole/` when using `cubby` authorization. Default will be `/vault-token`.
 * `username` - Username for `userpass` authenication.
@@ -207,6 +216,8 @@ Parameters (`application/json`) -
 * `user_id_path` - See `USER_ID_PATH` in *Vault Startup Authorization Methods*
 * `user_id_hash` - See `USER_ID_HASH` in *Vault Startup Authorization Methods*
 * `user_id_salt` - See `USER_ID_SALT` in *Vault Startup Authorization Methods*
+* `aws_role` - See `AWS_ROLE` in *Vault Startup Authorization Methods*
+* `aws_nonce` - See `AWS_NONCE` in *Vault Startup Authorization Methods*
 
 Response -
 
@@ -237,7 +248,7 @@ Response -
 Request a token.
 
 Parameters (`application/json`) -
-* `task_id` - The Mesos Task ID of the service. This is exported by Mesos to container environments in the environment variable `MESOS_TASK_ID`.
+* `task_id` - The Mesos Task ID or ECS Task ARN of the service. The Mesos Task Id is exported by Mesos to container environments in the environment variable `MESOS_TASK_ID`.
 
 Response -
 
@@ -263,7 +274,11 @@ import (
 )
 
 func main() {
+	// Mesos 
 	token, err := gatekeeper.RequestVaultToken("geard.3d151450-1092-11e6-8d2c-00163e105043")
+	fmt.Printf("%v %v\n", token, err)
+	// ECS 
+	token, err = gatekeeper.RequestVaultToken("arn:aws:ecs:us-west-1:123456789012:task/4d98b71d-5d86-4d09-a01d-f2e7b8dd7bd1")
 	fmt.Printf("%v %v\n", token, err)
 }
 ```

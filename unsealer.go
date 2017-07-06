@@ -13,6 +13,8 @@ import (
 	"net"
 	"path"
 	"strings"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"log"
 )
 
 type vaultError struct {
@@ -328,4 +330,41 @@ func (t WrappedTokenUnsealer) Token() (string, error) {
 
 func (t WrappedTokenUnsealer) Name() string {
 	return "wrapped-token"
+}
+
+type AwsUnsealer struct {
+	Role  string
+	Nonce string
+	genericUnsealer
+}
+
+func (aws AwsUnsealer) Token() (string, error) {
+	svc := ec2metadata.New(awsSession)
+	pkcs7, err := svc.GetDynamicData("instance-identity/pkcs7")
+
+	if err != nil {
+		log.Printf("Unable to retrieve pkcs7 code: %v", err)
+		return "", err
+	}
+
+	resp, err := aws.genericUnsealer.Token(goreq.Request{
+		Uri:    vaultPath("/v1/auth/aws-ec2/login", ""),
+		Method: "POST",
+		Body: struct {
+			Role  string `json:"role,omitempty"`
+			Nonce string `json:"nonce,omitempty"`
+			Pkcs7 string `json:"pkcs7"`
+		}{aws.Role,aws.Nonce,pkcs7},
+		MaxRedirects:    10,
+		RedirectHeaders: true,
+	})
+
+	if err != nil {
+		log.Printf("Unable to authenticate with Vault: %v", err)
+	}
+	return resp, err
+}
+
+func (aws AwsUnsealer) Name() string {
+	return "aws"
 }

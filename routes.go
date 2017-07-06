@@ -17,6 +17,7 @@ func Status(c *gin.Context) {
 		Started        time.Time   `json:"started"`
 		Ok             bool        `json:"ok"`
 		Version        string      `json:"version"`
+		Provider       string      `json:"provider"`
 	}
 	opts.Stats = state.Stats
 	opts.Uptime = time.Now().Sub(state.Started).String()
@@ -24,6 +25,7 @@ func Status(c *gin.Context) {
 	opts.Started = state.Started
 	opts.Ok = true
 	opts.Version = gitNearestTag
+	opts.Provider = config.Provider
 	switch state.Status {
 	case StatusSealed:
 		opts.StatusSealed = "block"
@@ -58,6 +60,9 @@ func Unseal(c *gin.Context) {
 		Password string `json:"password"`
 
 		CubbyPath string `json:"cubby_path"`
+
+		AwsRole   string `json:"aws_role"`
+		AwsNonce  string `json:"aws_nonce"`
 	}
 	switch c.Request.Header.Get("Content-Type") {
 	case "application/x-www-form-urlencoded", "multipart/form-data":
@@ -93,6 +98,9 @@ func Unseal(c *gin.Context) {
 			request.CubbyPath = c.Request.FormValue("cubby_path")
 		case "wrapped-token":
 			request.Token = c.Request.FormValue("wrapped_token")
+		case "aws":
+			request.AwsRole  = c.Request.FormValue("aws_role")
+			request.AwsNonce = c.Request.FormValue("aws_nonce")
 		default:
 			c.JSON(400, struct {
 				Status string `json:"status"`
@@ -145,6 +153,11 @@ func Unseal(c *gin.Context) {
 	case "wrapped-token":
 		unsealer = WrappedTokenUnsealer{
 			TempToken: request.Token,
+		}
+	case "aws":
+		unsealer = AwsUnsealer{
+			Role: request.AwsRole,
+			Nonce:request.AwsNonce,
 		}
 	default:
 		c.JSON(400, struct {
