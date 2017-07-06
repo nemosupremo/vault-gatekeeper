@@ -31,3 +31,4 @@ vault-gatekeeper-mesos
 vltgatekeeper
 vault
 .minimesos
+*.iml

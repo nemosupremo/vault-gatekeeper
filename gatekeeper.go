@@ -39,11 +39,14 @@ var config struct {
 	ListenAddress    string
 	TlsCert          string
 	TlsKey           string
+	Provider         string
 	Mesos            string
 	MaxTaskLife      time.Duration
 	AppIdAuth        AppIdUnsealer
 	CubbyAuth        CubbyUnsealer
 	WrappedTokenAuth WrappedTokenUnsealer
+	AwsEc2Login      bool
+	AwsEc2           AwsUnsealer
 }
 
 var state struct {
@@ -78,6 +81,8 @@ func init() {
 	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.")
 	flag.StringVar(&config.TlsKey, "tls-key", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS.")
 
+	flag.StringVar(&config.Provider, "provider", defaultEnvVar("DOCKER_PROVIDER", "mesos"), "Docker runtime provider (Supports mesos, ecs or test). (Overrides the DOCKER_PROVIDER environment variable if set.)")
+
 	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", ""), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
 
 	flag.StringVar(&config.Vault.Server, "vault", defaultEnvVar("VAULT_ADDR", ""), "Address to vault server. (Overrides the VAULT_ADDR environment variable if set.)")
@@ -100,6 +105,13 @@ func init() {
 	flag.StringVar(&config.AppIdAuth.UserIdPath, "auth-userid-path", defaultEnvVar("USER_ID_PATH", ""), "File path for 'file' user id authenication method. (Overrides the USER_ID_PATH environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdHash, "auth-userid-hash", defaultEnvVar("USER_ID_HASH", ""), "Hash the user id with the following algorithim (sha256, sha1, md5). The hex representation of the hash will be used. (Overrides the USER_ID_HASH environment variable if set.)")
 	flag.StringVar(&config.AppIdAuth.UserIdSalt, "auth-userid-salt", defaultEnvVar("USER_ID_SALT", ""), "If hashing, salt the hash in the format 'salt$user_id'. (Overrides the USER_ID_SALT environment variable if set.)")
+
+	flag.BoolVar(&config.AwsEc2Login, "auth-aws-ec2", func() bool {
+		b, err := strconv.ParseBool(defaultEnvVar("AWS_EC2_LOGIN", "0"))
+		return err == nil && b
+	}(), "Use AWS EC2 pkcs7 authentication. (Overrides the AWS_EC2_LOGIN environment variable if set.)")
+	flag.StringVar(&config.AwsEc2.Role, "auth-aws-ec2-role", defaultEnvVar("AWS_ROLE", ""), "Vault AWS-EC2 role for authentication (Overrides the AWS_ROLE environment variable if set.)")
+	flag.StringVar(&config.AwsEc2.Nonce, "auth-aws-ec2-nonce", defaultEnvVar("AWS_NONCE", ""), "Vault AWS-EC2 nonce for repeated authentication (Overrides the AWS_NONCE variable if set.")
 
 	flag.BoolVar(&config.SelfRecreate, "self-recreate-token", func() bool {
 		b, err := strconv.ParseBool(defaultEnvVar("RECREATE_TOKEN", "0"))
@@ -244,7 +256,7 @@ func unseal(unsealer Unsealer) error {
 			log.Printf("Failed to load policies: %v", err)
 			return err
 		}
-		log.Printf("The gate has been unsealed with method '%s'.", unsealer.Name())
+		log.Printf("The gate has been unsealed with method '%s' using '%s' provider.", unsealer.Name(), config.Provider)
 		state.Token = token
 		state.Status = StatusUnsealed
 		state.OnSealed = make(chan struct{})
@@ -365,6 +377,14 @@ func main() {
 			os.Exit(1)
 		}
 		log.Println("Unseal successful with app-id credentials.")
+	} else if config.AwsEc2Login {
+		log.Println("Attempting to unseal with AWS EC2 credentials...")
+		if err := unseal(config.AwsEc2); err != nil {
+			log.Println("Failed to unseal using AWS EC2. Please make sure the AWS EC2 pkcs7 auth is correctly setup.")
+			log.Println("Error:", err)
+			os.Exit(1)
+		}
+		log.Println("Unseal successful with AWS EC2 credentials.")
 	}
 	log.Printf("Listening and serving on '%s'...", config.ListenAddress)
 
