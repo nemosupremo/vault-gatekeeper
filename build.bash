@@ -54,4 +54,17 @@ name="${pkg}.gitFilesModified"
 value="$(git -C "${git_repo}" diff-index --name-only HEAD)"
 ldflags+=("-X" "\"${name}=${value}\"")
 
-go build -ldflags "${ldflags[*]}" -o "${output_filename}"
+GO_BUILD_CMD="go build -ldflags"
+GO_BUILD_OPT="${ldflags[*]}"
+
+# Build 386 amd64 binaries
+OS_PLATFORM_ARG=(linux windows darwin)
+OS_ARCH_ARG=(amd64)
+for OS in ${OS_PLATFORM_ARG[@]}; do
+  for ARCH in ${OS_ARCH_ARG[@]}; do
+    echo "Building binary for $OS/$ARCH..."
+    GOARCH=$ARCH GOOS=$OS CGO_ENABLED=0 $GO_BUILD_CMD "$GO_BUILD_OPT" -o "bin/${output_filename}_${OS-$ARCH}"
+  done
+done
+
+#go build -ldflags "${ldflags[*]}" -o "${output_filename}"

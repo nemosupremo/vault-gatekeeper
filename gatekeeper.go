@@ -36,6 +36,7 @@ var config struct {
 		GkPolicies string
 	}
 	SelfRecreate     bool
+	SealHttpStatus   int
 	ListenAddress    string
 	TlsCert          string
 	TlsKey           string
@@ -117,6 +118,15 @@ func init() {
 		b, err := strconv.ParseBool(defaultEnvVar("RECREATE_TOKEN", "0"))
 		return err == nil && b
 	}(), "When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for the token to have a ttl).")
+
+	flag.IntVar(&config.SealHttpStatus, "seal-http-status", func() int {
+		b, err := strconv.ParseInt(defaultEnvVar("SEAL_HTTP_STATUS", "200"), 10, 0)
+		if err == nil {
+			return 200
+		} else {
+			return int(b)
+		}
+	}(), "Configures HTTP Status Code to be returned when querying /status.json. By default uses 200 in both cases, but can be configured to return 429, for example, if the status is sealed. (Overrides the SEAL_HTTP_STATUS variable if set.)")
 
 	if d, err := time.ParseDuration(defaultEnvVar("TASK_LIFE", "2m")); err == nil {
 		flag.DurationVar(&config.MaxTaskLife, "task-life", d, "The maximum amount of time that a task can be alive during which it can ask for a authorization token.")

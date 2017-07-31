@@ -12,6 +12,7 @@ func Status(c *gin.Context) {
 		Stats          interface{} `json:"stats"`
 		StatusUnsealed string      `json:"-"`
 		StatusSealed   string      `json:"-"`
+		HttpStatus     int         `json:"-"`
 		Uptime         string      `json:"uptime"`
 		Status         string      `json:"status"`
 		Started        time.Time   `json:"started"`
@@ -30,13 +31,15 @@ func Status(c *gin.Context) {
 	case StatusSealed:
 		opts.StatusSealed = "block"
 		opts.StatusUnsealed = "none"
+		opts.HttpStatus = config.SealHttpStatus
 	case StatusUnsealed:
 		opts.StatusSealed = "none"
 		opts.StatusUnsealed = "block"
+		opts.HttpStatus = 200
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/status.json") ||
 		c.Request.Header.Get("accept") == "application/json" {
-		c.JSON(200, opts)
+		c.JSON(opts.HttpStatus, opts)
 		return
 	}
 	c.HTML(200, "status", opts)
@@ -61,8 +64,8 @@ func Unseal(c *gin.Context) {
 
 		CubbyPath string `json:"cubby_path"`
 
-		AwsRole   string `json:"aws_role"`
-		AwsNonce  string `json:"aws_nonce"`
+		AwsRole  string `json:"aws_role"`
+		AwsNonce string `json:"aws_nonce"`
 	}
 	switch c.Request.Header.Get("Content-Type") {
 	case "application/x-www-form-urlencoded", "multipart/form-data":
@@ -99,7 +102,7 @@ func Unseal(c *gin.Context) {
 		case "wrapped-token":
 			request.Token = c.Request.FormValue("wrapped_token")
 		case "aws":
-			request.AwsRole  = c.Request.FormValue("aws_role")
+			request.AwsRole = c.Request.FormValue("aws_role")
 			request.AwsNonce = c.Request.FormValue("aws_nonce")
 		default:
 			c.JSON(400, struct {
@@ -156,8 +159,8 @@ func Unseal(c *gin.Context) {
 		}
 	case "aws":
 		unsealer = AwsUnsealer{
-			Role: request.AwsRole,
-			Nonce:request.AwsNonce,
+			Role:  request.AwsRole,
+			Nonce: request.AwsNonce,
 		}
 	default:
 		c.JSON(400, struct {
