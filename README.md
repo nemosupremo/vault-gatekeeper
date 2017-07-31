@@ -59,6 +59,8 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `RECREATE_TOKEN` | `-self-recreate-token` - *Default: `false`* - When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for the token to have a ttl).
 
+`SEAL_HTTP_STATUS` | `-seal-http-status` - *Default: `200`* - Configures HTTP Status Code to be returned when querying /status.json.  By default uses 200 in both cases, but can be configured to return 429, for example, if the status is sealed.
+
 ### Vault Startup Authorization Methods
 
 `VAULT_TOKEN` - Vault authorization token to make requests with.
