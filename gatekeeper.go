@@ -43,6 +43,7 @@ var config struct {
 	Provider         string
 	Mesos            string
 	MaxTaskLife      time.Duration
+	TaskMultiToken   bool
 	AppIdAuth        AppIdUnsealer
 	CubbyAuth        CubbyUnsealer
 	WrappedTokenAuth WrappedTokenUnsealer
@@ -133,6 +134,10 @@ func init() {
 	} else {
 		panic(d)
 	}
+	flag.BoolVar(&config.TaskMultiToken, "task-multi-token", func() bool {
+		b, err := strconv.ParseBool(defaultEnvVar("TASK_MULTI_TOKEN", "0"))
+		return err == nil && b
+	}(), "Allow tasks to request multiple tokens before it reaches its maximum task life.")
 }
 
 func recreateToken(token string, policies []string, ttl int) (string, error) {
