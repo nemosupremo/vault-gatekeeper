@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+
+	"github.com/hashicorp/go-cleanhttp"
 )
 
 type Client struct {
@@ -65,19 +67,22 @@ func NewClient(vaultAddress, gatekeeperAddress string, certPool *x509.CertPool) 
 	client := new(Client)
 	client.VaultAddress = vaultAddress
 	client.GatekeeperAddress = gatekeeperAddress
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
-	if certPool != nil {
-		tr.TLSClientConfig.RootCAs = certPool
-	}
-	client.HttpClient = &http.Client{Transport: tr}
+
 	if _, err := url.Parse(client.GatekeeperAddress); err != nil {
 		return nil, err
 	}
 	if _, err := url.Parse(client.VaultAddress); err != nil {
 		return nil, err
 	}
+
+	tr := cleanhttp.DefaultTransport()
+	tr.TLSClientConfig = &tls.Config{}
+	if certPool != nil {
+		tr.TLSClientConfig.RootCAs = certPool
+	}
+
+	client.HttpClient = &http.Client{Transport: tr}
+
 	return client, nil
 }
 
