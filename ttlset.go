@@ -43,8 +43,6 @@ func (t *TtlSet) Put(key string, ttl time.Duration) {
 }
 
 func (t *TtlSet) UsageCount(key string) int {
-	//zz := t.s[key]
-	//return zz.fetchCount
 	return t.s[key].fetchCount
 }
 
