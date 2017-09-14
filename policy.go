@@ -18,10 +18,12 @@ func (ple policyLoadError) Error() string {
 }
 
 type policy struct {
-	Policies []string          `json:"policies"`
-	Meta     map[string]string `json:"meta,omitempty"`
-	Ttl      int               `json:"ttl,omitempty"`
-	NumUses  int               `json:"num_uses,omitempty"`
+	Policies        []string          `json:"policies"`
+	Meta            map[string]string `json:"meta,omitempty"`
+	Ttl             int               `json:"ttl,omitempty"`
+	NumUses         int               `json:"num_uses,omitempty"`
+	MultiFetch      bool              `json:"multi_fetch,omitempty"`
+	MultiFetchLimit int               `json:"multi_fetch_limit,omitempty"`
 }
 
 type policies map[string]*policy
