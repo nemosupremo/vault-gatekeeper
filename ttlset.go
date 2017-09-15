@@ -10,57 +10,62 @@ type entry struct {
 	fetchCount int
 }
 
+type LockedEntry struct {
+	e map[string]entry
+	sync.RWMutex
+}
+
 type TtlSet struct {
 	sync.RWMutex
-	s    map[string]entry
+	s    LockedEntry
 	quit chan struct{}
 }
 
 func NewTtlSet() *TtlSet {
 	t := &TtlSet{}
-	t.s = make(map[string]entry)
+	t.s.e = make(map[string]entry)
 	t.quit = make(chan struct{})
 	go t.garbageCollector()
 	return t
 }
 
 func (t *TtlSet) Has(key string) bool {
-	t.RLock()
-	defer t.RUnlock()
-	_, ok := t.s[key]
+	t.s.RLock()
+	defer t.s.RUnlock()
+	_, ok := t.s.e[key]
 	return ok
 }
 
 func (t *TtlSet) Put(key string, ttl time.Duration) {
-	t.Lock()
-	a := t.s[key]
+	t.s.Lock()
+	a := t.s.e[key]
 	if a.fetchCount == 0 {
 		a.tstamp = time.Now().Add(ttl)
 	}
 	a.fetchCount = a.fetchCount + 1
-	t.s[key] = a
-	t.Unlock()
+	t.s.e[key] = a
+	t.s.Unlock()
 }
 
 func (t *TtlSet) UsageCount(key string) int {
-	return t.s[key].fetchCount
+	return t.s.e[key].fetchCount
 }
 
 func (t *TtlSet) Destroy() {
-	t.Lock()
+	t.s.Lock()
 	close(t.quit)
-	t.s = nil
-	t.Unlock()
+	t.s.e = nil
+	t.s.Unlock()
 }
 
 func (t *TtlSet) cleanup() {
-	t.Lock()
-	for k, v := range t.s {
+	t.s.Lock()
+	for k, v := range t.s.e {
 		if time.Now().After(v.tstamp) {
-			delete(t.s, k)
+			delete(t.s.e, k)
 		}
 	}
-	t.Unlock()
+	t.s.Unlock()
 }
 
 func (t *TtlSet) garbageCollector() {
