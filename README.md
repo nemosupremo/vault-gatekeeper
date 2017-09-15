@@ -125,12 +125,38 @@ can only create tokens with a subset of its own policies.
 ## Policies
 
 
-VGM will create token's with given policies by using the data in its `policies` config. This config is pulled from vault from the `generic` backend (and supplied by you).
+VGM will create tokens with given policies by using the data in its `policies` config. This config is pulled from from vault, whose path is determined by a combination of a `generic` backend,
+which defaults to `secret`, and a key provided by you. For example, if you provide a policy path of `/gatekeeper-policy`, this translates to `/secret/gatekeeper-policy` in vault.
 A `policies` config is a simple json structure, with the key name being the Mesos task name (with the Marathon framework this is your app name), or ECS Task Definition name part of the ARN, and the value being select
-token options. Policy names support glob-style matching, with the longest pattern taking priority. .
+token options. Policy names support glob-style matching, with the longest pattern taking priority.
+
+
+#### Token Options
+`policies` (list, optional, default: default policy) - A list of policies to attach to the provided vault token
+
+`meta` (dict, optional) - Token metadata
+
+`ttl` (int, optional) - TTL of the provided token
+
+`num_uses` (int, optional) - Number of time a token can be used. 0 is translated to no limit
+
+`multi_fetch` (bool, optional, default: false) - Allows a task to request multiple tokens before it reaches its maximum task life. This is useful for a single task that contain multiple processes, each which require their own token
+
+`multi_fetch_limit` (int) - If `multi_fetch` is true, this value specifies how many times a task can obtain a token
+
+
+### Example policy config
 
 ```json
 {
+	"app-server":{
+		"policies":["app"],
+		"meta":{"foo":"bar"},
+		"multi_fetch":true,
+		"multi_fetch_limit":10,
+		"ttl":3000,
+		"num_uses":0,
+	},
 	"web-server":{
 		"policies":["web"],
 		"meta":{"foo":"bar"},

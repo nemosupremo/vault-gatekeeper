@@ -12,9 +12,9 @@ import (
 )
 
 type RunningTask struct {
-	Id          string
-	Name        string
-	StartTime   time.Time
+	Id        string
+	Name      string
+	StartTime time.Time
 }
 
 func (t *RunningTask) Valid() bool {
@@ -26,6 +26,7 @@ type Provider func(string) (RunningTask, error)
 var errTaskNotFresh = errors.New("This task has been running too long to request a token.")
 var errTaskEmptyStatuses = errors.New("This task does not have any statuses.")
 var errAlreadyGivenKey = errors.New("This task has already been given a token.")
+var errMaxTokensGiven = errors.New("Maximum number of tokens given to this task.")
 var errNoSupportedProvider = errors.New("No supported provider has been configured.")
 var usedTaskIds = NewTtlSet()
 
@@ -148,16 +149,6 @@ func Provide(c *gin.Context) {
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(&reqParams); err == nil {
-		if usedTaskIds.Has(reqParams.TaskId) {
-			log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errAlreadyGivenKey)
-			atomic.AddInt32(&state.Stats.Denied, 1)
-			c.JSON(403, struct {
-				Status string `json:"status"`
-				Ok     bool   `json:"ok"`
-				Error  string `json:"error"`
-			}{string(state.Status), false, errAlreadyGivenKey.Error()})
-			return
-		}
 		/*
 			The task can start, but the task's framework may have not reported
 			that it is RUNNING back to mesos. In this case, the task will still
@@ -194,6 +185,27 @@ func Provide(c *gin.Context) {
 			state.RLock()
 			policy := activePolicies.Get(task.Name)
 			state.RUnlock()
+
+			if !policy.MultiFetch && usedTaskIds.Has(reqParams.TaskId) {
+				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v", remoteIp, reqParams.TaskId, errAlreadyGivenKey)
+				atomic.AddInt32(&state.Stats.Denied, 1)
+				c.JSON(403, struct {
+					Status string `json:"status"`
+					Ok     bool   `json:"ok"`
+					Error  string `json:"error"`
+				}{string(state.Status), false, errAlreadyGivenKey.Error()})
+				return
+			}
+			if policy.MultiFetch && usedTaskIds.UsageCount(reqParams.TaskId) >= policy.MultiFetchLimit {
+				log.Printf("Rejected token request from %s (Task Id: %s). Reason: %v Limit: %v", remoteIp, reqParams.TaskId, errMaxTokensGiven, policy.MultiFetchLimit)
+				atomic.AddInt32(&state.Stats.Denied, 1)
+				c.JSON(403, struct {
+					Status string `json:"status"`
+					Ok     bool   `json:"ok"`
+					Error  string `json:"error"`
+				}{string(state.Status), false, errMaxTokensGiven.Error()})
+				return
+			}
 			if tempToken, err := createTokenPair(token, policy); err == nil {
 				log.Printf("Provided token pair for %s in %v. (Task Id: %s) (Task Name: %s). Policies: %v", remoteIp, time.Now().Sub(requestStartTime), reqParams.TaskId, task.Name, policy.Policies)
 				atomic.AddInt32(&state.Stats.Successful, 1)
@@ -240,7 +252,7 @@ func Provide(c *gin.Context) {
 	}
 }
 
-func getProvider() (Provider) {
+func getProvider() Provider {
 	if config.Provider == "mesos" {
 		return mesosProvider
 	}
