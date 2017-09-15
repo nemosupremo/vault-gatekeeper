@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
-
-	"github.com/hashicorp/go-cleanhttp"
+	"time"
 )
 
 type Client struct {
@@ -75,8 +75,26 @@ func NewClient(vaultAddress, gatekeeperAddress string, certPool *x509.CertPool) 
 		return nil, err
 	}
 
-	tr := cleanhttp.DefaultTransport()
-	tr.TLSClientConfig = &tls.Config{}
+	tr := &http.Transport{
+		// Defaults
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: time.Second,
+
+		// Disable keepalives
+		MaxIdleConnsPerHost: -1,
+		DisableKeepAlives:   true,
+
+		// TLS Config
+		TLSClientConfig: &tls.Config{},
+	}
+
 	if certPool != nil {
 		tr.TLSClientConfig.RootCAs = certPool
 	}
