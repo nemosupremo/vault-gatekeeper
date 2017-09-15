@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 )
 
 type Client struct {
@@ -65,19 +67,40 @@ func NewClient(vaultAddress, gatekeeperAddress string, certPool *x509.CertPool) 
 	client := new(Client)
 	client.VaultAddress = vaultAddress
 	client.GatekeeperAddress = gatekeeperAddress
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
-	if certPool != nil {
-		tr.TLSClientConfig.RootCAs = certPool
-	}
-	client.HttpClient = &http.Client{Transport: tr}
+
 	if _, err := url.Parse(client.GatekeeperAddress); err != nil {
 		return nil, err
 	}
 	if _, err := url.Parse(client.VaultAddress); err != nil {
 		return nil, err
 	}
+
+	tr := &http.Transport{
+		// Defaults
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: time.Second,
+
+		// Disable keepalives
+		MaxIdleConnsPerHost: -1,
+		DisableKeepAlives:   true,
+
+		// TLS Config
+		TLSClientConfig: &tls.Config{},
+	}
+
+	if certPool != nil {
+		tr.TLSClientConfig.RootCAs = certPool
+	}
+
+	client.HttpClient = &http.Client{Transport: tr}
+
 	return client, nil
 }
 
