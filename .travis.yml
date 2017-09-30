@@ -21,7 +21,7 @@ env:
     - PATH=$PATH:$HOME/.minimesos/bin
 
 go:
-  - 1.6
+  - 1.8
 
 install:
   - curl -sSL https://minimesos.org/install | sh
