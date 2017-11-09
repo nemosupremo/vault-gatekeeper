@@ -7,14 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/franela/goreq"
 	"hash"
 	"io/ioutil"
+	"log"
 	"net"
 	"path"
 	"strings"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"log"
 )
 
 type vaultError struct {
@@ -354,7 +354,7 @@ func (aws AwsUnsealer) Token() (string, error) {
 			Role  string `json:"role,omitempty"`
 			Nonce string `json:"nonce,omitempty"`
 			Pkcs7 string `json:"pkcs7"`
-		}{aws.Role,aws.Nonce,pkcs7},
+		}{aws.Role, aws.Nonce, pkcs7},
 		MaxRedirects:    10,
 		RedirectHeaders: true,
 	})

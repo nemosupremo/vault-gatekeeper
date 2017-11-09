@@ -5,18 +5,18 @@ import (
 	//"log"
 	"net/http"
 	//"net/url"
+	"encoding/json"
+	"errors"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"encoding/json"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"errors"
 )
 
 type ecsMetaData struct {
-	ClusterName             string `json:"Cluster"`
-	ContainerInstanceArn    string `json:"ContainerInstanceArn"`
-	Version                 string `json:"Version"`
+	ClusterName          string `json:"Cluster"`
+	ContainerInstanceArn string `json:"ContainerInstanceArn"`
+	Version              string `json:"Version"`
 }
 
 var awsSession = session.New()
@@ -46,7 +46,7 @@ func getEcsTask(taskId string) (ecs.Task, error) {
 	if err == nil && len(resp.Tasks) == 1 {
 		return *resp.Tasks[0], err
 	} else {
-		if (err == nil) {
+		if err == nil {
 			err = errors.New("Unable to get ECS Task MetaData")
 		}
 	}
@@ -55,7 +55,7 @@ func getEcsTask(taskId string) (ecs.Task, error) {
 }
 
 func getEcsClusterMetaData() (ecsMetaData, error) {
-	var meta        ecsMetaData
+	var meta ecsMetaData
 	var masterErr error
 
 	localIp, masterErr := getEcsIp()

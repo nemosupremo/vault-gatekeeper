@@ -264,7 +264,7 @@ func getProvider() Provider {
 	if config.Provider == "test" { //|| (reqParams.TaskId == state.testingTaskId && state.testingTaskId != "") {
 		return testProvider
 	}
-	
+
 	if config.Provider == "mesos_test" {
 		return mesosTestProvider
 	}
