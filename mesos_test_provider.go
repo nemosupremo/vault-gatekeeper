@@ -9,16 +9,16 @@ import (
 
 func mesosTestProvider(taskId string) (RunningTask, error) {
 	parts := strings.Split(taskId, ".")
-	if len(parts) == 2 && parts[0] != "" {
+	if len(parts) == 2 && parts[1] != "" {
 		return RunningTask{
-			Id: taskId,
-			Name: parts[0],
+			Id:        taskId,
+			Name:      parts[0],
 			StartTime: time.Now(),
 		}, nil
 	} else {
 		return RunningTask{
-			Id: fmt.Sprintf("%s.%d", parts[0], rand.Int()),
-			Name: parts[0],
+			Id:        fmt.Sprintf("%s.%d", parts[0], rand.Int()),
+			Name:      parts[0],
 			StartTime: time.Now(),
 		}, nil
 	}
