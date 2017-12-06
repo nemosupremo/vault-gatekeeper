@@ -53,7 +53,9 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `VAULT_CAPATH` | `-ca-path` -  Path to a directory of PEM encoded CA cert files to verify the Vault server SSL certificate.
 
-`GATE_POLICIES` | `-policies` - The path on the `generic` vault backend to load policies from (See Policies section). The initial `/secret` path segment should not be included.
+`GATE_POLICIES` | `-policies` - *Default: `/gatekeeper`* The path on the `generic` vault backend to load policies from (See Policies section). The initial `/secret` path segment should not be included.
+
+`GATE_POLICIES_NESTED` | `-policies-nested` - *Default: `false`* - Option to load nested policies from sub directories starting at the path specified by GATE_POLICIES. 
 
 `TASK_LIFE` | `-task-life` - *Default: `2m`* - The maximum age of a task before VGM will refuse to issue tokens for it.
 
@@ -125,10 +127,12 @@ can only create tokens with a subset of its own policies.
 ## Policies
 
 
-VGM will create tokens with given policies by using the data in its `policies` config. This config is pulled from from vault, whose path is determined by a combination of a `generic` backend,
+VGM will create tokens with given policies by using the data in its `policies` config. This config is pulled from vault, whose path is determined by a combination of a `generic` backend,
 which defaults to `secret`, and a key provided by you. For example, if you provide a policy path of `/gatekeeper-policy`, this translates to `/secret/gatekeeper-policy` in vault.
 A `policies` config is a simple json structure, with the key name being the Mesos task name (with the Marathon framework this is your app name), or ECS Task Definition name part of the ARN, and the value being select
 token options. Policy names support glob-style matching, with the longest pattern taking priority.
+
+ 
 
 
 #### Token Options
@@ -155,42 +159,108 @@ token options. Policy names support glob-style matching, with the longest patter
 		"multi_fetch":true,
 		"multi_fetch_limit":10,
 		"ttl":3000,
-		"num_uses":0,
+		"num_uses":0
 	},
 	"web-server":{
 		"policies":["web"],
 		"meta":{"foo":"bar"},
 		"ttl":3000,
-		"num_uses":0,
+		"num_uses":0
 	},
 	"ChronosTask:my_special_task":{
 		"policies":["special_task"],
 		"meta":{"foo":"bar"},
 		"ttl":3000,
-		"num_uses":0,
+		"num_uses":0
 	},
 	"ChronosTask:*":{
 		"policies":["batch"],
 		"meta":{"foo":"bar"},
 		"ttl":3000,
-		"num_uses":0,
+		"num_uses":0
 	},
 	"*":{
 		"policies":["default"],
-		"ttl":1500,
+		"ttl":1500
 	}
 }
 ```
 
 In the above, any task starting with `ChronosTask:` will get the `batch` policy except `ChronosTask:my_special_task`, which will get `special_task`.
 
-You will have to use the Vault API in order to set th epolicies to your backend. Assuming your policy is saved as `policy.json`, here's how to save that information using cURL.
+You will have to use the Vault API in order to set the policies to your backend. Assuming your policy is saved as `policy.json`, here's how to save that information using cURL.
 
 ```bash
 $ curl -X POST -H "X-Vault-Token: <MY TOKEN>" -H "Content-Type: application/json" -d @policy.json http://vault/v1/secret/gatekeeper
 ```
 
 If you update the policy secret, you will need to restart VGM or reload the policies via the `/policies/reload` API (see below) to apply the changes.
+
+####Policy - Optional nested policies
+An option to keeping all the policies in a single json file is to organize the policies into nested groups. The policies can be broken into separate config json files and stored in vault to policy paths that are sub directories to the path specified in the Argument GATE_POLICIES. 
+This option can be activated by setting the Argument GATE_POLICIES_NESTED to True. This option can help when different groups manage their own policies or when there are a large number of policies.  
+
+For example, the policies listed in the Example policy config above, could be separated by servers and applications where "app-server" and "web-server" 
+could be posted to /v1/secret/gatekeeper/servers and the two Chronos policies could be posted to /v1/secret/gatekeeper/chronos. The global policy * in the example could remain in its own json file that could still be posted to 
+/v1/secret/gatekeeper. Multiple levels of nesting is supported.  
+
+### Example nested policy configs
+##### server json
+```json
+{
+	"app-server":{
+		"policies":["app"],
+		"meta":{"foo":"bar"},
+		"multi_fetch":true,
+		"multi_fetch_limit":10,
+		"ttl":3000,
+		"num_uses":0
+	},
+	"web-server":{
+		"policies":["web"],
+		"meta":{"foo":"bar"},
+		"ttl":3000,
+		"num_uses":0
+	}
+}
+```
+##### chronos json
+```json
+{
+	"ChronosTask:my_special_task":{
+		"policies":["special_task"],
+		"meta":{"foo":"bar"},
+		"ttl":3000,
+		"num_uses":0
+	},
+	"ChronosTask:*":{
+		"policies":["batch"],
+		"meta":{"foo":"bar"},
+		"ttl":3000,
+		"num_uses":0
+	}
+}
+```
+##### policy json
+```json
+{
+	"*":{
+		"policies":["default"],
+		"ttl":1500
+	}
+}
+```
+
+The organization of the policies does not impact gatekeeper internally since all the nested policies are loaded into a single list when they are initially loaded during an "unseal" or when reloaded (see policies/reload  API).
+Note that any duplicate key names will be logged and then skipped.  
+
+The cURL example above would now need two additional POSTs with the different json files and paths:
+
+```bash
+... -d @servers.json http://vault/v1/secret/gatekeeper/servers
+... -d @chronos.json http://vault/v1/secret/gatekeeper/chronos
+```
+
 
 ## API
 

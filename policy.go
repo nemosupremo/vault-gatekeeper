@@ -87,6 +87,20 @@ func (p policies) Get(key string) *policy {
 }
 
 func (p policies) Load(authToken string) error {
+
+	log.Printf("Load/Reload of policies initiated. Policy count was %v.", len(p))
+
+	//enables policies to be loaded from sub directories instead of only a single location.
+	if config.Vault.GkPoliciesNested {
+		err := p.loadNestedPolicies(authToken)
+		if err != nil { //loadNestedPolicies had an error. policies are unchanged.
+			return policyLoadError{err}
+		} else {
+			log.Printf("Load/Reload policies complete. Policy count is %v.", len(p))
+			return nil
+		}
+	}
+
 	r, err := VaultRequest{goreq.Request{
 		Uri:             vaultPath(path.Join("/v1/secret", config.Vault.GkPolicies), ""),
 		MaxRedirects:    10,
@@ -106,6 +120,7 @@ func (p policies) Load(authToken string) error {
 				for k, v := range resp.Data {
 					p[k] = v
 				}
+				log.Printf("Load/Reload policies complete. Policy count is %v.", len(p))
 				return nil
 			} else {
 				return policyLoadError{fmt.Errorf("There was an error decoding policy from vault. This can occur when using vault-cli to save the policy json, as vault-cli saves it as a string rather than a json object.")}
@@ -118,6 +133,7 @@ func (p policies) Load(authToken string) error {
 			for k, v := range defaultPolicies {
 				p[k] = v
 			}
+			log.Printf("Load/Reload policies complete. Policy count is %v.", len(p))
 			return nil
 		default:
 			var e vaultError

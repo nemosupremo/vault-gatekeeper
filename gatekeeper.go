@@ -34,6 +34,7 @@ var config struct {
 		CaCert     string
 		CaPath     string
 		GkPolicies string
+		GkPoliciesNested  bool
 	}
 	SelfRecreate     bool
 	SealHttpStatus   int
@@ -88,6 +89,11 @@ func init() {
 
 	flag.StringVar(&config.Vault.Server, "vault", defaultEnvVar("VAULT_ADDR", ""), "Address to vault server. (Overrides the VAULT_ADDR environment variable if set.)")
 	flag.StringVar(&config.Vault.GkPolicies, "policies", defaultEnvVar("GATE_POLICIES", "/gatekeeper"), "Path to the json formatted policies configuration file on the vault generic backend.")
+	flag.BoolVar(&config.Vault.GkPoliciesNested, "policies-nested", func() bool {
+		b, err := strconv.ParseBool(defaultEnvVar("GATE_POLICIES_NESTED", "0"))
+		return err == nil && b
+	}(), "Option to load policies from nested paths below the path identified by GkPolicies. Will still include any policies found at GkPolicies path. Duplicate names skipped.")
+
 	flag.BoolVar(&config.Vault.Insecure, "tls-skip-verify", func() bool {
 		b, err := strconv.ParseBool(defaultEnvVar("VAULT_SKIP_VERIFY", "0"))
 		return err == nil && b
