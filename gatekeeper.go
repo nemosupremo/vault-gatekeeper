@@ -92,7 +92,7 @@ func init() {
 	flag.BoolVar(&config.Vault.GkPoliciesNested, "policies-nested", func() bool {
 		b, err := strconv.ParseBool(defaultEnvVar("GATE_POLICIES_NESTED", "0"))
 		return err == nil && b
-	}(), "Option to load policies from nested paths below the path identified by GkPolicies. Will still include any policies found at GkPolicies path. Duplicate names skipped.")
+	}(), "Option to load nested policies from paths below the path identified by GkPolicies. Will still include any policies found at GkPolicies path. Duplicate names skipped.")
 
 	flag.BoolVar(&config.Vault.Insecure, "tls-skip-verify", func() bool {
 		b, err := strconv.ParseBool(defaultEnvVar("VAULT_SKIP_VERIFY", "0"))
