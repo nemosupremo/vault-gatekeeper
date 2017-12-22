@@ -132,8 +132,6 @@ which defaults to `secret`, and a key provided by you. For example, if you provi
 A `policies` config is a simple json structure, with the key name being the Mesos task name (with the Marathon framework this is your app name), or ECS Task Definition name part of the ARN, and the value being select
 token options. Policy names support glob-style matching, with the longest pattern taking priority.
 
- 
-
 
 #### Token Options
 `policies` (list, optional, default: default policy) - A list of policies to attach to the provided vault token
@@ -252,7 +250,8 @@ could be posted to /v1/secret/gatekeeper/servers and the two Chronos policies co
 ```
 
 The organization of the policies does not impact gatekeeper internally since all the nested policies are loaded into a single list when they are initially loaded during an "unseal" or when reloaded (see policies/reload  API).
-Note that any duplicate key names will be logged and then skipped.  
+
+Note: When loading using the nested policies option, and duplicate key names will be logged and then skipped. When not using nested policies, the original logic will over write the policy if a duplicate is encountered.
 
 The cURL example above would now need two additional POSTs for the new json files and paths:
 
