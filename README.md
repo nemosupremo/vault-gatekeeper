@@ -196,8 +196,7 @@ $ curl -X POST -H "X-Vault-Token: <MY TOKEN>" -H "Content-Type: application/json
 
 If you update the policy secret, you will need to restart VGM or reload the policies via the `/policies/reload` API (see below) to apply the changes.
 
-
-####Policy - Optional nested policies
+#### Optional nested policies
 An option to keeping all the policies in a single json file is to organize the policies into nested groups. The policies can be broken into separate config json files and stored in vault to policy paths that are sub directories to the path specified in the Argument GATE_POLICIES. 
 This option can be activated by setting the Argument GATE_POLICIES_NESTED to True. This option can help when different groups manage their own policies or when there are a large number of policies.  
 
@@ -255,7 +254,7 @@ could be posted to /v1/secret/gatekeeper/servers and the two Chronos policies co
 The organization of the policies does not impact gatekeeper internally since all the nested policies are loaded into a single list when they are initially loaded during an "unseal" or when reloaded (see policies/reload  API).
 Note that any duplicate key names will be logged and then skipped.  
 
-The cURL example above would now need two additional POSTs with the different json files and paths:
+The cURL example above would now need two additional POSTs for the new json files and paths:
 
 ```bash
 ... -d @servers.json http://vault/v1/secret/gatekeeper/servers
