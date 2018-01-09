@@ -251,7 +251,7 @@ could be posted to /v1/secret/gatekeeper/servers and the two Chronos policies co
 
 The organization of the policies does not impact gatekeeper internally since all the nested policies are loaded into a single list when they are initially loaded during an "unseal" or when reloaded (see policies/reload  API).
 
-Note: When loading using the nested policies option, and duplicate key names will be logged and then skipped. When not using nested policies, the original logic will overwrite the policy if a duplicate is encountered.
+Note: When loading using the nested policies option, any duplicate key names will be logged and then skipped. When not using nested policies, the original logic will overwrite the policy if a duplicate is encountered.
 
 The cURL example above would now need two additional POSTs for the new json files and paths:
 
