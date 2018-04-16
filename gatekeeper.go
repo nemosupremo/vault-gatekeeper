@@ -127,7 +127,7 @@ func init() {
 
 	flag.IntVar(&config.SealHttpStatus, "seal-http-status", func() int {
 		b, err := strconv.ParseInt(defaultEnvVar("SEAL_HTTP_STATUS", "200"), 10, 0)
-		if err == nil {
+		if err != nil {
 			return 200
 		} else {
 			return int(b)
