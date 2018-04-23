@@ -117,7 +117,7 @@ func createTokenPair(token string, p *policy) (string, error) {
 		NumUses   int               `json:"num_uses"`
 		NoParent  bool              `json:"no_parent"`
 		Renewable bool              `json:"renewable"`
-	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true, true}
+	}{time.Duration(time.Duration(p.Ttl) * time.Second).String(), pol, p.Meta, p.NumUses, true, *p.Renewable}
 
 	return createWrappedToken(token, permTokenOpts, 10*time.Minute)
 }

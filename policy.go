@@ -24,6 +24,7 @@ type policy struct {
 	NumUses         int               `json:"num_uses,omitempty"`
 	MultiFetch      bool              `json:"multi_fetch,omitempty"`
 	MultiFetchLimit int               `json:"multi_fetch_limit,omitempty"`
+	Renewable	*bool		  `json:"renewable,omitempty"`
 }
 
 type policies map[string]*policy
@@ -44,11 +45,13 @@ func (k policyKeyList) Less(i, j int) bool {
 
 var defaultPolicy = &policy{
 	Ttl: 21600,
+	Renewable: &config.DefaultRenewable,
 }
 var defaultPolicies = map[string]*policy{
 	"*": &policy{
-		Policies: []string{"default"},
-		Ttl:      21600,
+		Policies: 	[]string{"default"},
+		Ttl:      	21600,
+		Renewable: 	&config.DefaultRenewable,
 	},
 }
 var activePolicies = make(policies)
@@ -118,6 +121,9 @@ func (p policies) Load(authToken string) error {
 					delete(p, k)
 				}
 				for k, v := range resp.Data {
+					if v.Renewable == nil {
+						v.Renewable = &config.DefaultRenewable
+					}
 					p[k] = v
 				}
 				log.Printf("Load/Reload policies complete. Policy count is %v.", len(p))
