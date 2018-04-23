@@ -36,6 +36,7 @@ var config struct {
 		GkPolicies string
 		GkPoliciesNested  bool
 	}
+	DefaultRenewable bool
 	SelfRecreate     bool
 	SealHttpStatus   int
 	ListenAddress    string
@@ -124,6 +125,11 @@ func init() {
 		b, err := strconv.ParseBool(defaultEnvVar("RECREATE_TOKEN", "0"))
 		return err == nil && b
 	}(), "When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for the token to have a ttl).")
+
+	flag.BoolVar(&config.DefaultRenewable, "default-renewable-tokens", func() bool {
+		b, err := strconv.ParseBool(defaultEnvVar("DEFAULT_RENEWABLE", "1"))
+		return err == nil && b
+	}(), "The default value for renewable on tokens created.")
 
 	flag.IntVar(&config.SealHttpStatus, "seal-http-status", func() int {
 		b, err := strconv.ParseInt(defaultEnvVar("SEAL_HTTP_STATUS", "200"), 10, 0)
