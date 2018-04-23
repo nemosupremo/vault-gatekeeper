@@ -24,7 +24,7 @@ type policy struct {
 	NumUses         int               `json:"num_uses,omitempty"`
 	MultiFetch      bool              `json:"multi_fetch,omitempty"`
 	MultiFetchLimit int               `json:"multi_fetch_limit,omitempty"`
-	Renewable	*bool		  `json:"renewable,omitempty"`
+	Renewable       *bool             `json:"renewable,omitempty"`
 }
 
 type policies map[string]*policy
@@ -44,14 +44,14 @@ func (k policyKeyList) Less(i, j int) bool {
 }
 
 var defaultPolicy = &policy{
-	Ttl: 21600,
+	Ttl:       21600,
 	Renewable: &config.DefaultRenewable,
 }
 var defaultPolicies = map[string]*policy{
 	"*": &policy{
-		Policies: 	[]string{"default"},
-		Ttl:      	21600,
-		Renewable: 	&config.DefaultRenewable,
+		Policies:  []string{"default"},
+		Ttl:       21600,
+		Renewable: &config.DefaultRenewable,
 	},
 }
 var activePolicies = make(policies)
