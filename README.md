@@ -63,6 +63,8 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `SEAL_HTTP_STATUS` | `-seal-http-status` - *Default: `200`* - Configures HTTP Status Code to be returned when querying /status.json.  By default uses 200 in both cases, but can be configured to return 429, for example, if the status is sealed.
 
+`DEFAULT_RENEWABLE` | `-default-renewable-tokens` - *Default: `true`* - The default value for renewable on tokens created.
+
 ### Vault Startup Authorization Methods
 
 `VAULT_TOKEN` - Vault authorization token to make requests with.
