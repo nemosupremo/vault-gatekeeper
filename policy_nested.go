@@ -56,6 +56,9 @@ func (p policies) loadNestedPolicies(authToken string) error {
 
 	/* Copy tempPolicies to policies */
 	for k,v := range tempPolicies{
+		if v.Renewable == nil {
+			v.Renewable = &config.DefaultRenewable
+		}
 		p[k] = v
 	}
 
