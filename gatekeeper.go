@@ -81,8 +81,8 @@ func defaultEnvVar(key string, def string) (val string) {
 
 func init() {
 	flag.StringVar(&config.ListenAddress, "listen", defaultEnvVar("LISTEN_ADDR", ":9201"), "Hostname and port to listen on. (Overrides the LISTEN_ADDR environment variable if set.)")
-	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.")
-	flag.StringVar(&config.TlsKey, "tls-key", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS.")
+	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS. File reread on SIGHUP.")
+	flag.StringVar(&config.TlsKey, "tls-key", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS. File reread on SIGHUP.")
 
 	flag.StringVar(&config.Provider, "provider", defaultEnvVar("DOCKER_PROVIDER", "mesos"), "Docker runtime provider (Supports mesos, ecs or test). (Overrides the DOCKER_PROVIDER environment variable if set.)")
 
@@ -415,7 +415,7 @@ func main() {
 	}
 	if config.TlsCert != "" || config.TlsKey != "" {
 		runFunc = func() error {
-			return r.RunTLS(config.ListenAddress, config.TlsCert, config.TlsKey)
+			return ListenAndServeTLS(config.ListenAddress, config.TlsCert, config.TlsKey, r)
 		}
 	}
 	if err := runFunc(); err != nil {
