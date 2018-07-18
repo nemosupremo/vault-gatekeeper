@@ -20,7 +20,9 @@ function run_tests() {
 
 	# wait for vault to startup
 	sleep 5
-	vault auth-enable userpass
+	vault secrets move secret/ kv/
+	vault secrets enable -version=1 -path=secret kv
+	vault auth enable userpass
 	# If using Docker for Mac, IP should be localhost
 	if [ "$(uname)" == "Darwin" ]; then
 	    export VAULT_ADDR="http://127.0.0.1:8200"
