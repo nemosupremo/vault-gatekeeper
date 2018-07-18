@@ -37,9 +37,9 @@ VGM also supports the client environment variables used by vault such as, `VAULT
 
 `LISTEN_ADDR` | `-listen` - *Default: `:9201`* - The address this service should listen on.
 
-`TLS_CERT` | `-tls-cert` - Path to TLS certificate. If this value is set, gatekeeper will be served over TLS.
+`TLS_CERT` | `-tls-cert` - Path to TLS certificate. If this value is set, gatekeeper will be served over TLS. File reread on SIGHUP.
 
-`TLS_KEY` | `-tls-key` - Path to TLS key. If this value is set, gatekeeper will be served over TLS.
+`TLS_KEY` | `-tls-key` - Path to TLS key. If this value is set, gatekeeper will be served over TLS. File reread on SIGHUP.
 
 `PROVIDER` | `-provider` - Configures the underlying Docker environment provider.  Currently supports `mesos` (default), `ecs` and `test` (Test provider should only be used during testing)
 
