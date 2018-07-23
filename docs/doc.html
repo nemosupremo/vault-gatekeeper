@@ -35,7 +35,7 @@
 <pre><code class="hljs css languages- sh">$ vault policy write gatekeeper ./gatekeeper-policy.hcl
 </code></pre>
 <p>Then create a <code>gatekeeper</code> AppRole. Ensure to set the <code>period</code> on the configuration so that the token can be renewed indefinitely.</p>
-<pre><code class="hljs css languages- sh">$ ./vault write auth/approle/role/gatekeeper \
+<pre><code class="hljs css languages- sh">$ vault write auth/approle/role/gatekeeper \
     secret_id_ttl=10m \
     secret_id_num_uses=1 \
     policies=gatekeeper \
