@@ -450,8 +450,11 @@ func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRo
 			if task.Group() != "" && !g.config.UseImageNames {
 				policyKey = providerKey + ":" + task.Group() + ":" + taskName
 			}
+			g.RLock()
+			currentPolicies := g.Policies
+			g.RUnlock()
 
-			if policy, ok := g.Policies.Get(policyKey); ok && len(policy.Roles) > 0 {
+			if policy, ok := currentPolicies.Get(policyKey); ok && len(policy.Roles) > 0 {
 				if err := g.Store.Acquire(g.Token, providerKey+":"+task.Id(), policy.NumUses, g.config.MaxTaskLife+1*time.Minute); err == nil {
 					roleName := policy.Roles[0]
 					if requestedRole != "" {
