@@ -42,6 +42,8 @@ var rootCmd = &cobra.Command{
 	PersistentPreRun: Setup,
 }
 
+var RootCmd = rootCmd
+
 func Setup(cmd *cobra.Command, args []string) {
 	if l, err := logrus.ParseLevel(viper.GetString("log-level")); err == nil {
 		logrus.SetLevel(l)

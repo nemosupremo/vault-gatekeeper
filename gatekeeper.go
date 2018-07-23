@@ -584,7 +584,7 @@ func (g *Gatekeeper) TokenTtl() (time.Duration, error) {
 		case 200:
 			var resp struct {
 				Data struct {
-					Ttl int `json:"ttle`
+					Ttl int `json:"ttl"`
 				} `json:"data"`
 			}
 			if err := r.Body.FromJsonTo(&resp); err == nil {

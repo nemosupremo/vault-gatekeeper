@@ -35,7 +35,7 @@ set -e
 ldflags+=("-X" "\"${name}=${value}\"")
 
 # Nearest tag on branch
-name="${pkg}.gitNearestTag"
+name="${pkg}.Version"
 value="$(git -C "${git_repo}" describe --abbrev=0 --tags HEAD)"
 ldflags+=("-X" "\"${name}=${value}\"")
 

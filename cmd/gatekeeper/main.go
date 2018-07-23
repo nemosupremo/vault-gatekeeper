@@ -17,6 +17,7 @@ var (
 
 func main() {
 	cmd.Version = Version
+	cmd.RootCmd.Version = Version
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	cmd.Execute()
 }
