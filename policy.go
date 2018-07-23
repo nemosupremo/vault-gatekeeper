@@ -1,13 +1,18 @@
-package main
+package gatekeeper
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
+	"strings"
+
 	"github.com/franela/goreq"
-	"github.com/ryanuber/go-glob"
-	"log"
-	"path"
-	"sort"
+	"github.com/nemosupremo/vault-gatekeeper/policy"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
 )
+
+var policyNotFound = errors.New("No policy saved at configured location.")
 
 type policyLoadError struct {
 	Err error `json:"error"`
@@ -17,95 +22,78 @@ func (ple policyLoadError) Error() string {
 	return fmt.Sprintf("Error loading policy from vault: %v", ple.Err)
 }
 
-type policy struct {
-	Policies        []string          `json:"policies"`
-	Meta            map[string]string `json:"meta,omitempty"`
-	Ttl             int               `json:"ttl,omitempty"`
-	NumUses         int               `json:"num_uses,omitempty"`
-	MultiFetch      bool              `json:"multi_fetch,omitempty"`
-	MultiFetchLimit int               `json:"multi_fetch_limit,omitempty"`
-	Renewable       *bool             `json:"renewable,omitempty"`
-}
-
-type policies map[string]*policy
-
-// Type and methods to sort a list of policy keys
-// by descending length of key. Implements sort.Interface
-type policyKeyList []string
-
-func (k policyKeyList) Len() int {
-	return len(k)
-}
-func (k policyKeyList) Swap(i, j int) {
-	k[i], k[j] = k[j], k[i]
-}
-func (k policyKeyList) Less(i, j int) bool {
-	return len(k[i]) > len(k[j])
-}
-
-var defaultPolicy = &policy{
-	Ttl:       21600,
-	Renewable: &config.DefaultRenewable,
-}
-var defaultPolicies = map[string]*policy{
-	"*": &policy{
-		Policies:  []string{"default"},
-		Ttl:       21600,
-		Renewable: &config.DefaultRenewable,
-	},
-}
-var activePolicies = make(policies)
-
-func (p policies) Get(key string) *policy {
-	// First look for an exact match
-	if pol, ok := p[key]; ok {
-		return pol
-	}
-
-	// Now we're going to check for globs
-	// Order the keys in descending order of length
-	// so that "foobar*" takes precedence over "foo*"
-	// Now organize the keys by length
-	policyKeys := make(policyKeyList, len(p))
-	i := 0
-	for k := range p {
-		policyKeys[i] = k
-		i++
-	}
-	sort.Sort(policyKeys)
-
-	// Iterate over the keys to find one that matches by glob
-	for _, pattern := range policyKeys {
-		if glob.Glob(pattern, key) {
-			return p[pattern]
-		}
-	}
-
-	// Finally look for a catchall
-	if pol, ok := p["*"]; ok {
-		return pol
+func (g *Gatekeeper) loadPolicies() (*policy.Policies, error) {
+	if conf, err := g.GetPolicyConfig(); err == nil {
+		return policy.LoadPoliciesFromJson(conf)
 	} else {
-		return defaultPolicy
+		return nil, err
 	}
 }
 
-func (p policies) Load(authToken string) error {
-
-	log.Printf("Load/Reload of policies initiated. Policy count was %v.", len(p))
-
-	//enables policies to be loaded from sub directories instead of only a single location.
-	if config.Vault.GkPoliciesNested {
-		err := p.loadNestedPolicies(authToken)
-		if err != nil { //loadNestedPolicies had an error. policies are unchanged.
-			return policyLoadError{err}
-		} else {
-			log.Printf("Load/Reload policies complete. Policy count is %v.", len(p))
-			return nil
+func (g *Gatekeeper) GetPolicyConfig() ([]byte, error) {
+	initialPolicyDir := g.config.PolicyPath
+	policies := make(map[string]policy.Policy)
+	if policyDirectories, err := g.getNestedPolicyDirs(initialPolicyDir, g.Token); err == nil {
+		for _, dir := range policyDirectories {
+			if policy, err := getPolicy(dir, g.Token); err == nil {
+				for k, v := range policy {
+					policies[k] = v
+				}
+			} else if err == policyNotFound {
+				continue
+			} else {
+				return nil, err
+			}
 		}
+	} else {
+		return nil, err
+	}
+	if len(policies) == 0 {
+		return nil, policyNotFound
+	}
+	return json.MarshalIndent(policies, "", "\t")
+}
+
+func (g *Gatekeeper) getNestedPolicyDirs(initialPolicyDir string, authToken string) ([]string, error) {
+	// Start with empty list
+	var nestedPolicyDirs []string
+	var subDirs []string
+
+	// always add the initial dir because it won't have a "/" suffix.
+	nestedPolicyDirs = append(nestedPolicyDirs, initialPolicyDir)
+
+	err := g.getDirList(initialPolicyDir, authToken, &nestedPolicyDirs, &subDirs)
+	if err != nil {
+		return nestedPolicyDirs, err
 	}
 
-	r, err := VaultRequest{goreq.Request{
-		Uri:             vaultPath(path.Join("/v1/secret", config.Vault.GkPolicies), ""),
+	/* loop through subDirs until no more entries have a suffix of "/" */
+	moreSubDirectories := true
+	for moreSubDirectories {
+		moreSubDirectories = false
+		for i, subDir := range subDirs {
+			if strings.HasSuffix(subDir, "/") { //subDir should always end with "/"
+				moreSubDirectories = true
+				//remove the "/" suffix to indicate that it has been processed. (abc/ becomes abc)
+				subDirs[i] = strings.TrimSuffix(subDir, "/")
+				err = g.getDirList(subDirs[i], authToken, &nestedPolicyDirs, &subDirs)
+				if err != nil {
+					return nestedPolicyDirs, err
+				}
+				break //restart range at the beginning instead of continuing. Will keep hierarchical dir order.
+			}
+		}
+	}
+	return nestedPolicyDirs, err
+}
+
+func (g *Gatekeeper) getDirList(path string, authToken string, nestedPolicies *[]string, subDirs *[]string) error {
+	uri := path
+	if g.config.Vault.KvVersion == "2" {
+		uri = strings.Replace(path, "/data/", "/metadata/", 1)
+	}
+	r, err := vault.Request{goreq.Request{
+		Uri:             vault.Path(uri+"/", "list=true"),
 		MaxRedirects:    10,
 		RedirectHeaders: true,
 	}.WithHeader("X-Vault-Token", authToken)}.Do()
@@ -113,45 +101,89 @@ func (p policies) Load(authToken string) error {
 		defer r.Body.Close()
 		switch r.StatusCode {
 		case 200:
-			resp := struct {
-				Data policies `json:"data"`
-			}{}
-			if err := r.Body.FromJsonTo(&resp); err == nil {
-				for k, _ := range p {
-					delete(p, k)
-				}
-				for k, v := range resp.Data {
-					if v.Renewable == nil {
-						v.Renewable = &config.DefaultRenewable
+			var scrts struct {
+				Auth interface{} `json:"auth"`
+				Data struct {
+					Keys []string `json:"keys"`
+				} `json:"data"`
+				LeaseDuration int    `json:"lease_duration"`
+				LeaseID       string `json:"lease_id"`
+				Renewable     bool   `json:"renewable"`
+			}
+			if err := r.Body.FromJsonTo(&scrts); err == nil {
+				for i := range scrts.Data.Keys {
+					//add to sub dir list when "/" suffix
+					if strings.HasSuffix(scrts.Data.Keys[i], "/") {
+						*subDirs = append(*subDirs, path+"/"+scrts.Data.Keys[i])
+					} else {
+						*nestedPolicies = append(*nestedPolicies, path+"/"+scrts.Data.Keys[i])
 					}
-					p[k] = v
 				}
-				log.Printf("Load/Reload policies complete. Policy count is %v.", len(p))
 				return nil
 			} else {
-				return policyLoadError{fmt.Errorf("There was an error decoding policy from vault. This can occur when using vault-cli to save the policy json, as vault-cli saves it as a string rather than a json object.")}
+				return err
 			}
 		case 404:
-			log.Printf("There was no policy in the secret backend at %v. Tokens created will have the default vault policy.", config.Vault.GkPolicies)
-			for k, _ := range p {
-				delete(p, k)
-			}
-			for k, v := range defaultPolicies {
-				p[k] = v
-			}
-			log.Printf("Load/Reload policies complete. Policy count is %v.", len(p))
+			/* A 404 is returned when no sub directories exist below the current directory which is ok. */
 			return nil
+
+		case 403:
+			log.Warnf("403 Permission Denied when trying to list policy %v", uri+"/")
+			fallthrough
 		default:
-			var e vaultError
+			var e vault.Error
+			e.Code = r.StatusCode
+			if err := r.Body.FromJsonTo(&e); err != nil {
+				e.Errors = []string{"communication error.", " getDirList: path = " + path}
+
+			}
+			return e
+		}
+	} else {
+		return err
+	}
+}
+
+func getPolicy(path string, authToken string) (map[string]policy.Policy, error) {
+	r, err := vault.Request{goreq.Request{
+		Uri:             vault.Path(path),
+		MaxRedirects:    10,
+		RedirectHeaders: true,
+	}.WithHeader("X-Vault-Token", authToken)}.Do()
+	if err == nil {
+		defer r.Body.Close()
+		switch r.StatusCode {
+		case 200:
+			var resp struct {
+				Data struct {
+					Data map[string]policy.Policy `json:"data"`
+				} `json:"data"`
+			}
+			if err := r.Body.FromJsonTo(&resp); err == nil {
+				return resp.Data.Data, nil
+			} else {
+				return nil, policyLoadError{fmt.Errorf("There was an error decoding policy from vault. This can occur " +
+					"when using vault-cli to save the policy json, as vault-cli saves it as a string rather than a json object.")}
+			}
+		case 404:
+			return nil, policyNotFound
+		case 403:
+			log.Warnf("403 Permission Denied when trying to get policy %v", path)
+			fallthrough
+		default:
+			var e vault.Error
 			e.Code = r.StatusCode
 			if err := r.Body.FromJsonTo(&e); err == nil {
-				return policyLoadError{e}
+				return nil, e
 			} else {
-				e.Errors = []string{"communication error."}
-				return policyLoadError{e}
+				e.Errors = []string{"communication error.", " getPolicyFile: path = " + path}
+				return nil, e
 			}
 		}
 	} else {
-		return policyLoadError{err}
+		var e vault.Error
+		e.Code = 503
+		e.Errors = []string{fmt.Sprint("There was an error getting the policy file from vault at ", path, ". Error = ", err.Error())}
+		return nil, e
 	}
 }

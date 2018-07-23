@@ -1,216 +1,357 @@
-package main
+package gatekeeper
 
 import (
-	"flag"
-	"fmt"
-	"github.com/franela/goreq"
-	"github.com/gin-gonic/gin"
+	"encoding/json"
 	"os"
 	"testing"
+	"time"
+
+	"github.com/franela/goreq"
+	"github.com/nemosupremo/vault-gatekeeper/policy"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler/mock"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
+	"github.com/segmentio/ksuid"
+	"github.com/spf13/viper"
 )
 
-var (
-	flagMesosAddr    = flag.String("mesos_master", os.Getenv("MINIMESOS_MASTER"), "Mesos Master Address")
-	flagMarathonAddr = flag.String("marathon", os.Getenv("MINIMESOS_MARATHON"), "Marathon Address")
-	flagZkAddr       = flag.String("zk", os.Getenv("MINIMESOS_ZOOKEEPER"), "Zookeeper Address")
-	flagVaultToken   = flag.String("token", os.Getenv("VAULT_TOKEN"), "Vault Token")
-)
-
-const (
-	vaultUser         = "gktest"
-	vaultPass         = "gk-test"
-	vaultUnsealPolicy = `// Policy Reading
-path "secret/gatekeeper" {
-	capabilities = ["read"]
+const rootPolicy = `{
+	"*":{
+		"roles":["wildcard"],
+		"num_uses": 1
+	},
+	"x":{
+		"roles":["invalid"],
+		"num_uses": 1
+	}
 }`
-	sampleGkPolicy = `{
-	    "app1":{
-	        "policies":["app1"],
-	        "meta":{"foo":"bar"},
-	        "ttl":3000,
-	        "num_uses":0
-	    },
-	    "*":{
-	        "policies":["default"],
-	        "ttl":1500
-	    }
-	}`
-	gkListenAddress = "127.0.0.1:8765"
-)
 
-func TestMain(m *testing.M) {
-	r, err := VaultRequest{goreq.Request{
-		Uri:             vaultPath("/v1/secret/gatekeeper", ""),
-		MaxRedirects:    10,
-		RedirectHeaders: true,
-		Body:            sampleGkPolicy,
-		ContentType:     "application/json",
-		Method:          "POST",
-	}.WithHeader("X-Vault-Token", *flagVaultToken)}.Do()
-	if err == nil {
-		defer r.Body.Close()
-		switch r.StatusCode {
-		case 200, 204:
-			//
-		default:
-			var e vaultError
-			e.Code = r.StatusCode
-			if err := r.Body.FromJsonTo(&e); err == nil {
-				panic(fmt.Sprintf("Could not set policies vault: %v", e.Errors))
-			} else {
-				panic("Could not set policies in vault.")
-			}
-		}
-	} else {
-		panic("Could not reach vault server: " + err.Error())
+const subPolicy = `{
+	"foo":{
+		"roles":["bar"],
+		"num_uses": 2
+	},
+	"x":{
+		"roles":["valid"],
+		"num_uses": 1
 	}
+}`
 
-	r, err = VaultRequest{goreq.Request{
-		Uri:             vaultPath("/v1/sys/policy/unseal", ""),
-		MaxRedirects:    10,
-		RedirectHeaders: true,
-		Body: struct {
-			Rules string `json:"rules"`
-		}{vaultUnsealPolicy},
-		ContentType: "application/json",
-		Method:      "POST",
-	}.WithHeader("X-Vault-Token", *flagVaultToken)}.Do()
-	if err == nil {
-		defer r.Body.Close()
-		switch r.StatusCode {
-		case 200, 204:
-			//
-		default:
-			var e vaultError
-			e.Code = r.StatusCode
-			if err := r.Body.FromJsonTo(&e); err == nil {
-				panic(fmt.Sprintf("Could not create token policies in vault: %v", e.Errors))
-			} else {
-				panic("Could not create token policies in vault.")
-			}
-		}
-	} else {
-		panic("Could not reach vault server: %s" + err.Error())
+var vaultToken = os.Getenv("VAULT_TOKEN")
+var vaultAddr = os.Getenv("VAULT_ADDR")
+
+func init() {
+	if vaultAddr == "" {
+		vaultAddr = "http://localhost:8200"
 	}
-
-	{
-		config.ListenAddress = gkListenAddress
-		r := gin.Default()
-		r.SetHTMLTemplate(statusPage)
-		r.GET("/", Status)
-		r.GET("/status.json", Status)
-		r.POST("/seal", Seal)
-		r.POST("/unseal", Unseal)
-		r.POST("/token", Provide)
-		r.POST("/policies/reload", ReloadPolicies)
-
-		go func() {
-			//log.Printf("Listening and serving on '%s'...", config.ListenAddress)
-			if err := r.Run(config.ListenAddress); err != nil {
-				panic("Failed to start server. Error: " + err.Error())
-			}
-		}()
-	}
-
-	os.Exit(m.Run())
+	viper.SetDefault("vault-addr", vaultAddr)
 }
 
-func TestTokenUnseal(t *testing.T) {
-	seal()
-	if err := unseal(TokenUnsealer{*flagVaultToken}); err != nil {
-		t.Fatalf("Token Unseal Failed: %v", err)
-	}
-}
-
-func TestWrappedTokenUnseal(t *testing.T) {
-	r, err := VaultRequest{
+func TestLoadPolicyV2(t *testing.T) {
+	secretPath := ksuid.New().String()
+	r, err := vault.Request{
 		goreq.Request{
-			Uri:    vaultPath("/v1/auth/token/create", ""),
+			Uri:    vault.Path("/v1/sys/mounts/" + secretPath),
 			Method: "POST",
 			Body: struct {
-				Ttl       string            `json:"ttl,omitempty"`
-				Policies  []string          `json:"policies"`
-				Meta      map[string]string `json:"meta,omitempty"`
-				NumUses   int               `json:"num_uses"`
-				NoParent  bool              `json:"no_parent"`
-				Renewable bool              `json:"renewable"`
-			}{"10s", []string{"unseal"}, nil, 0, true, true},
+				Type    string            `json:"type"`
+				Options map[string]string `json:"options"`
+			}{"kv", map[string]string{"version": "2"}},
 			MaxRedirects:    10,
 			RedirectHeaders: true,
-		}.WithHeader("X-Vault-Token", *flagVaultToken).WithHeader("X-Vault-Wrap-TTL", "10"),
+		}.WithHeader("X-Vault-Token", vaultToken),
+	}.Do()
+	if err != nil || (r.StatusCode != 200 && r.StatusCode != 204) {
+		t.Fatalf("failed to mount v2 secret backend.")
+	}
+
+	pathKey := ksuid.New().String()
+	for i, policy := range []string{rootPolicy, subPolicy} {
+		var path string
+		switch i {
+		case 0:
+			path = "/v1/" + secretPath + "/data/" + pathKey
+		case 1:
+			path = "/v1/" + secretPath + "/data/" + pathKey + "/foo/bar"
+		default:
+			t.Fatalf("misconfigured test.")
+		}
+		if err := installPolicy(path, policy); err != nil {
+			if verr, ok := err.(vault.Error); ok {
+				t.Fatalf("Could not upload policy to vault: %v", verr)
+			} else {
+				t.Fatalf("Failed to upload policy to vault: %v", err)
+			}
+		}
+	}
+
+	g := &Gatekeeper{}
+	g.config.PolicyPath = "/v1/" + secretPath + "/data/" + pathKey
+	g.config.Vault.KvVersion = "2"
+	g.Token = vaultToken
+	if policies, err := g.loadPolicies(); err == nil {
+		mustGet := func(p *policy.Policy, ok bool) *policy.Policy {
+			if ok {
+				return p
+			}
+			t.Fatalf("Did not find a matching policy")
+			return nil
+		}
+		if !mustGet(policies.Get("default")).Has("wildcard") {
+			t.Fatalf("Expected default role to have wildcard.")
+		}
+		if !mustGet(policies.Get("foo")).Has("bar") {
+			t.Fatalf("Expected foo policy to have bar role.")
+		}
+		if mustGet(policies.Get("x")).Has("invalid") {
+			t.Fatalf("Expected x policy to not have invalid role.")
+		}
+		if !mustGet(policies.Get("x")).Has("valid") {
+			t.Fatalf("Expected x policy to have valid role.")
+		}
+	} else {
+		t.Fatalf("Loading policies failed: %v", err)
+	}
+}
+
+func TestLoadPolicyV1(t *testing.T) {
+	secretPath := ksuid.New().String()
+	r, err := vault.Request{
+		goreq.Request{
+			Uri:    vault.Path("/v1/sys/mounts/" + secretPath),
+			Method: "POST",
+			Body: struct {
+				Type    string            `json:"type"`
+				Options map[string]string `json:"options"`
+			}{"kv", map[string]string{"version": "1"}},
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+		}.WithHeader("X-Vault-Token", vaultToken),
+	}.Do()
+	if err != nil || (r.StatusCode != 200 && r.StatusCode != 204) {
+		t.Fatalf("failed to mount v1 secret backend.")
+	}
+
+	pathKey := ksuid.New().String()
+	for i, policy := range []string{rootPolicy, subPolicy} {
+		var path string
+		switch i {
+		case 0:
+			path = "/v1/" + secretPath + "/" + pathKey
+		case 1:
+			path = "/v1/" + secretPath + "/" + pathKey + "/foo/bar"
+		default:
+			t.Fatalf("misconfigured test.")
+		}
+		if err := installPolicy(path, policy); err != nil {
+			if verr, ok := err.(vault.Error); ok {
+				t.Fatalf("Could not upload policy to vault: %v", verr)
+			} else {
+				t.Fatalf("Failed to upload policy to vault: %v", err)
+			}
+		}
+	}
+
+	g := &Gatekeeper{}
+	g.config.PolicyPath = "/v1/" + secretPath + "/" + pathKey
+	g.config.Vault.KvVersion = "1"
+	g.Token = vaultToken
+	if policies, err := g.loadPolicies(); err == nil {
+		mustGet := func(p *policy.Policy, ok bool) *policy.Policy {
+			if ok {
+				return p
+			}
+			t.Fatalf("Did not find a matching policy")
+			return nil
+		}
+		if !mustGet(policies.Get("default")).Has("wildcard") {
+			t.Fatalf("Expected default role to have wildcard.")
+		}
+		if !mustGet(policies.Get("foo")).Has("bar") {
+			t.Fatalf("Expected foo policy to have bar role.")
+		}
+		if mustGet(policies.Get("x")).Has("invalid") {
+			t.Fatalf("Expected x policy to not have invalid role.")
+		}
+		if !mustGet(policies.Get("x")).Has("valid") {
+			t.Fatalf("Expected x policy to have valid role.")
+		}
+	} else {
+		t.Fatalf("Loading policies failed: %v", err)
+	}
+}
+
+func installPolicy(path string, policy string) error {
+	r, err := vault.Request{
+		goreq.Request{
+			Uri:             vault.Path(path),
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+			Body: struct {
+				Data json.RawMessage `json:"data"`
+			}{json.RawMessage(policy)},
+			ContentType: "application/json",
+			Method:      "POST",
+		}.WithHeader("X-Vault-Token", vaultToken),
 	}.Do()
 	if err == nil {
 		defer r.Body.Close()
 		switch r.StatusCode {
-		case 200:
-			tk := vaultTokenResp{}
-			if err := r.Body.FromJsonTo(&tk); err != nil {
-				t.Fatal("Could not create wrapped token.")
-			}
-			seal()
-			if err := unseal(WrappedTokenUnsealer{tk.WrapInfo.Token}); err != nil {
-				t.Fatalf("Wrapped Token Unseal Failed: %v", err)
-			}
+		case 200, 204:
+			return nil
 		default:
-			var e vaultError
+			var e vault.Error
 			e.Code = r.StatusCode
 			if err := r.Body.FromJsonTo(&e); err == nil {
-				t.Fatalf("Could not create wrapped token: %v", e.Errors)
+				return e
 			} else {
-				t.Fatal("Could not create wrapped token.")
+				return err
 			}
 		}
 	} else {
-		t.Fatal("Could not reach vault server.")
+		return err
 	}
-
 }
 
-func TestUserPassUnseal(t *testing.T) {
-	r, err := VaultRequest{goreq.Request{
-		Uri:             vaultPath("/v1/auth/userpass/users/"+vaultUser, ""),
-		MaxRedirects:    10,
-		RedirectHeaders: true,
-		Body: struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-			Policies string `json:"policies"`
-		}{vaultUser, vaultPass, "unseal"},
-		ContentType: "application/json",
-		Method:      "POST",
-	}.WithHeader("X-Vault-Token", *flagVaultToken)}.Do()
+func createAuthEndpoint(authType string) (string, error) {
+	authPath := ksuid.New().String()
+	r, err := vault.Request{
+		goreq.Request{
+			Uri:    vault.Path("/v1/sys/auth/" + authPath),
+			Method: "POST",
+			Body: struct {
+				Type string `json:"type"`
+			}{authType},
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+		}.WithHeader("X-Vault-Token", vaultToken),
+	}.Do()
 	if err == nil {
 		defer r.Body.Close()
-		switch r.StatusCode {
-		case 200, 204:
-			//
-		default:
-			var e vaultError
+		if r.StatusCode == 200 || r.StatusCode == 204 {
+			return authPath, nil
+		} else {
+			var e vault.Error
 			e.Code = r.StatusCode
 			if err := r.Body.FromJsonTo(&e); err == nil {
-				t.Fatalf("Could not create sample user for vault: %v", e.Errors)
+				return "", e
 			} else {
-				t.Fatal("Could not create sample user for vault.")
+				return "", err
 			}
 		}
 	} else {
-		t.Fatal("Could not reach vault server.")
-	}
-
-	seal()
-	if err := unseal(UserpassUnsealer{Username: vaultUser, Password: vaultPass}); err != nil {
-		t.Fatalf("UserPass Unseal Failed: %v", err)
+		return "", err
 	}
 }
 
-func TestCubbyUnseal(t *testing.T) {
-	t.Skip("Deprecated")
-}
+const mockPolicy = `{
+	"mock:*":{
+		"roles":["test_role"],
+		"num_uses":1
+	},
+	"mock:special":{
+		"roles":["test_role", "{{name}}"],
+		"num_uses":1
+	}
+}`
 
-func TestAppIdUnseal(t *testing.T) {
-	t.Skip("TODO")
-}
+func TestRequestToken(t *testing.T) {
+	mock.ValidTaskId = ksuid.New().String()
 
-func TestGitHubUnseal(t *testing.T) {
-	t.Skip("TODO")
+	var authPath string
+	if ap, err := createAuthEndpoint("approle"); err == nil {
+		authPath = ap
+	} else {
+		t.Fatalf("Failed to initialize approle endpoint: %v", err)
+	}
+
+	policyPath := "v1/secret/data/" + ksuid.New().String()
+	for _, appRoleName := range []string{"mock", "test_role"} {
+		r, err := vault.Request{goreq.Request{
+			Uri:             vault.Path("/v1/auth/" + authPath + "/role/" + appRoleName),
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+			Body: struct {
+				Policies string `json:"policies"`
+			}{"unseal"},
+			ContentType: "application/json",
+			Method:      "POST",
+		}.WithHeader("X-Vault-Token", vaultToken)}.Do()
+
+		if err != nil || (r.StatusCode != 200 && r.StatusCode != 204) {
+			t.Fatalf("failed to create app role for testing")
+		}
+	}
+
+	if err := installPolicy(policyPath, mockPolicy); err != nil {
+		if verr, ok := err.(vault.Error); ok {
+			t.Fatalf("Could not upload policy to vault: %v", verr)
+		} else {
+			t.Fatalf("Failed to upload policy to vault: %v", err)
+		}
+	}
+
+	conf := Config{
+		Schedulers: []string{"mock"},
+		Store:      "memory",
+
+		PolicyPath:  policyPath,
+		MaxTaskLife: 1 * time.Minute,
+
+		Unsealer: unsealer.TokenUnsealer{vaultToken},
+	}
+
+	conf.Vault.Address = vaultAddr
+	conf.Vault.KvVersion = "2"
+	conf.Vault.AppRoleMount = authPath
+
+	if g, err := NewGatekeeper(conf); err == nil && g.IsUnsealed() {
+		if token, _, err := g.RequestToken("mock", mock.ValidTaskId, "", ""); err == nil {
+			if _, err := (unsealer.WrappedTokenUnsealer{token}).Token(); err != nil {
+				t.Fatalf("Wrapped token requested from gatekeeper could not be unwrapped: %v", err)
+			}
+		} else {
+			t.Fatalf("Failed to request token: %v", err)
+		}
+
+		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "", ""); err != ErrMaxTokensGiven {
+			t.Fatalf("Token request should have failed with ErrMaxTokensGiven: %v", err)
+		}
+
+		mock.ValidTaskId = ksuid.New().String()
+		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "super-role", ""); err != ErrRoleMismatch {
+			t.Fatalf("Token request should have failed with ErrRoleMismatch: %v", err)
+		}
+
+		mock.ValidTaskId = ksuid.New().String()
+		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "{{name}}", ""); err != ErrRoleMismatch {
+			t.Fatalf("Token request should have failed with ErrRoleMismatch: %v", err)
+		}
+
+		mock.ValidTaskId = "special"
+		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "{{name}}", ""); err != nil {
+			t.Fatalf("Token request should have succeeded with {{name}}: %v", err)
+		}
+
+		mock.ValidTaskId = "localhost"
+		g.config.HostCheck = true
+		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "{{name}}", "localhost"); err != nil {
+			t.Fatalf("Token request should have succeeded with {{name}}: %v", err)
+		}
+		g.config.HostCheck = false
+
+		if _, _, err := g.RequestToken("mock", ksuid.New().String(), "", ""); err != scheduler.ErrTaskNotFound {
+			t.Fatalf("Unknown task should have failed: %v", err)
+		}
+
+		if _, _, err := g.RequestToken("mock", "expired", "", ""); err != ErrTaskNotFresh {
+			t.Fatalf("Expired task should have returned task not fresh: %v", err)
+		}
+	} else if err == nil {
+		t.Fatalf("Failed to create gatekeeper instance: could not unseal.")
+	} else {
+		t.Fatalf("Failed to create gatekeeper instance: %v", err)
+	}
+
 }

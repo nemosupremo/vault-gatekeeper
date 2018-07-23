@@ -1,8 +1,10 @@
-vault
 vault-gatekeeper-mesos
 vltgatekeeper
 .DS_Store
 .minimesos/
 dist/builds/
 dist/release/
-.git/
+vault-gatekeeper
+vendor
+docs/website/node_modules
+docs/website/build

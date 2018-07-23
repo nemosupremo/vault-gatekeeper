@@ -1,233 +1,251 @@
-package main
+package gatekeeper
 
 import (
 	"encoding/json"
-	"github.com/gin-gonic/gin"
-	"strings"
+	"io"
+	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/franela/goreq"
+	"github.com/go-chi/chi"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
 )
 
-func Status(c *gin.Context) {
-	var opts struct {
-		Stats          interface{} `json:"stats"`
-		StatusUnsealed string      `json:"-"`
-		StatusSealed   string      `json:"-"`
-		HttpStatus     int         `json:"-"`
-		Uptime         string      `json:"uptime"`
-		Status         string      `json:"status"`
-		Started        time.Time   `json:"started"`
-		Ok             bool        `json:"ok"`
-		Version        string      `json:"version"`
-		Provider       string      `json:"provider"`
-	}
-	opts.Stats = state.Stats
-	opts.Uptime = time.Now().Sub(state.Started).String()
-	opts.Status = string(state.Status)
-	opts.Started = state.Started
-	opts.Ok = true
-	opts.Version = gitNearestTag
-	opts.Provider = config.Provider
-	switch state.Status {
-	case StatusSealed:
-		opts.StatusSealed = "block"
-		opts.StatusUnsealed = "none"
-		opts.HttpStatus = config.SealHttpStatus
-	case StatusUnsealed:
-		opts.StatusSealed = "none"
-		opts.StatusUnsealed = "block"
-		opts.HttpStatus = 200
-	}
-	if strings.HasPrefix(c.Request.URL.Path, "/status.json") ||
-		c.Request.Header.Get("accept") == "application/json" {
-		c.JSON(opts.HttpStatus, opts)
-		return
-	}
-	c.HTML(200, "status", opts)
-	return
+func (g *Gatekeeper) OkResponse(w http.ResponseWriter, message string) {
+	resp := struct {
+		Unsealed bool   `json:"unsealed"`
+		Message  string `json:"message"`
+	}{Unsealed: g.IsUnsealed()}
+	resp.Message = message
+
+	json.NewEncoder(w).Encode(resp)
 }
 
-func Unseal(c *gin.Context) {
-	var request struct {
-		Type string `json:"type"`
+func (g *Gatekeeper) ErrorResponse(w http.ResponseWriter, code int, err string) {
+	resp := struct {
+		Unsealed bool   `json:"unsealed"`
+		Error    string `json:"error"`
+	}{Unsealed: g.IsUnsealed()}
+	resp.Error = err
 
-		AppId           string `json:"app_id"`
-		UserIdMethod    string `json:"user_id_method"`
-		UserIdInterface string `json:"user_id_interface"`
-		UserIdPath      string `json:"user_id_path"`
-		UserIdHash      string `json:"user_id_hash"`
-		UserIdSalt      string `json:"user_id_salt"`
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (g *Gatekeeper) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Use(NewLogger(nil))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("Content-Type", "application/json")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	r.Get("/", g.status)
+	r.Get("/status", g.status)
+	r.Post("/seal", g.seal)
+	r.Post("/unseal", g.unseal)
+	r.Post("/token", g.requestToken)
+	r.Post("/policies/reload", g.reloadPolicies)
+
+	return r
+}
+
+func (g *Gatekeeper) status(w http.ResponseWriter, r *http.Request) {
+	var status struct {
+		Id       string      `json:"id"`
+		Stats    interface{} `json:"stats"`
+		Uptime   string      `json:"uptime"`
+		Unsealed bool        `json:"unsealed"`
+		Started  time.Time   `json:"started"`
+		Ok       bool        `json:"ok"`
+		Version  string      `json:"version"`
+		Peers    []peer      `json:"peers,omitempty"`
+	}
+	status.Id = g.PeerId
+	status.Started = g.Started
+	status.Uptime = time.Since(status.Started).String()
+	stats := g.Stats
+	status.Stats = stats
+	status.Ok = true
+	status.Version = g.config.Version
+	status.Unsealed = g.IsUnsealed()
+
+	var peers []peer
+	for _, peer := range g.Peers() {
+		peer.Address = peer.address()
+		peers = append(peers, peer)
+	}
+	status.Peers = peers
+
+	if status.Unsealed {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+
+	json.NewEncoder(w).Encode(status)
+}
+
+func (g *Gatekeeper) seal(w http.ResponseWriter, r *http.Request) {
+	g.Seal()
+	g.OkResponse(w, "Gatekeeper sealed.")
+}
+
+func (g *Gatekeeper) unseal(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Method string `json:"method"`
 
 		Token string `json:"token"`
 
-		Username string `json:"username"`
-		Password string `json:"password"`
+		PersonalToken string `json:"personal_token"`
 
-		CubbyPath string `json:"cubby_path"`
+		RoleId   string `json:"role_id"`
+		SecretId string `json:"secret_id"`
 
-		AwsRole  string `json:"aws_role"`
-		AwsNonce string `json:"aws_nonce"`
+		Role  string `json:"aws_role"`
+		Nonce string `json:"aws_nonce"`
 	}
-	switch c.Request.Header.Get("Content-Type") {
-	case "application/x-www-form-urlencoded", "multipart/form-data":
-		c.Request.ParseForm()
-		request.Type = c.Request.FormValue("auth_type")
-		switch request.Type {
-		case "app-id":
-			request.AppId = c.Request.FormValue("app-id_appid")
-			request.UserIdMethod = c.Request.FormValue("app-id_userid_method")
-			switch request.UserIdMethod {
-			case "mac":
-				request.UserIdInterface = c.Request.FormValue("app-id_userid_data")
-			case "file":
-				request.UserIdPath = c.Request.FormValue("app-id_userid_data")
-			default:
-				c.JSON(400, struct {
-					Status string `json:"status"`
-					Ok     bool   `json:"ok"`
-					Error  string `json:"error"`
-				}{string(state.Status), false, errUnknownUserIdMethod.Error()})
-			}
-			request.UserIdHash = c.Request.FormValue("app-id_userid_hash")
-			request.UserIdSalt = c.Request.FormValue("app-id_userid_salt")
-		case "userpass":
-			request.Username = c.Request.FormValue("userpass_username")
-			request.Password = c.Request.FormValue("userpass_password")
-		case "github":
-			request.Token = c.Request.FormValue("github_token")
+	if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+		var uns unsealer.Unsealer
+		switch body.Method {
 		case "token":
-			request.Token = c.Request.FormValue("token_token")
-		case "cubby":
-			request.Token = c.Request.FormValue("cubby_token")
-			request.CubbyPath = c.Request.FormValue("cubby_path")
-		case "wrapped-token":
-			request.Token = c.Request.FormValue("wrapped_token")
-		case "aws":
-			request.AwsRole = c.Request.FormValue("aws_role")
-			request.AwsNonce = c.Request.FormValue("aws_nonce")
+			uns = unsealer.TokenUnsealer{
+				AuthToken: body.Token,
+			}
+		case "token-wrapped":
+			uns = unsealer.WrappedTokenUnsealer{
+				TempToken: body.Token,
+			}
+		case "approle":
+			uns = unsealer.AppRoleUnsealer{
+				RoleId:   body.RoleId,
+				SecretId: body.SecretId,
+			}
+		case "aws-ec2", "aws":
+			uns = unsealer.AwsUnsealer{
+				Role:  body.Role,
+				Nonce: body.Nonce,
+			}
+		case "github":
+			uns = unsealer.GitHubUnsealer{
+				PersonalToken: body.PersonalToken,
+			}
 		default:
-			c.JSON(400, struct {
-				Status string `json:"status"`
-				Ok     bool   `json:"ok"`
-				Error  string `json:"error"`
-			}{string(state.Status), false, errUnknownAuthMethod.Error()})
+			g.ErrorResponse(w, http.StatusUnprocessableEntity, "Cannot unseal with unknown method: '"+body.Method+"'")
 			return
 		}
-	case "application/json":
-		decoder := json.NewDecoder(c.Request.Body)
-		if err := decoder.Decode(&request); err != nil {
-			c.JSON(400, struct {
-				Status string `json:"status"`
-				Ok     bool   `json:"ok"`
-				Error  string `json:"error"`
-			}{string(state.Status), false, err.Error()})
-			return
+		if err := g.Unseal(uns); err == nil {
+			g.OkResponse(w, "Unseal successful with the '"+uns.Name()+"' method.")
+		} else {
+			g.ErrorResponse(w, http.StatusUnauthorized, "Unseal failed with the '"+uns.Name()+"' method.")
 		}
-	}
-
-	var unsealer Unsealer
-	switch request.Type {
-	case "app-id":
-		unsealer = AppIdUnsealer{
-			AppId:           request.AppId,
-			UserIdMethod:    request.UserIdMethod,
-			UserIdInterface: request.UserIdInterface,
-			UserIdPath:      request.UserIdPath,
-			UserIdHash:      request.UserIdHash,
-			UserIdSalt:      request.UserIdSalt,
-		}
-	case "userpass":
-		unsealer = UserpassUnsealer{
-			Username: request.Username,
-			Password: request.Password,
-		}
-	case "github":
-		unsealer = GithubUnsealer{
-			PersonalToken: request.Token,
-		}
-	case "token":
-		unsealer = TokenUnsealer{
-			AuthToken: request.Token,
-		}
-	case "cubby":
-		unsealer = CubbyUnsealer{
-			TempToken: request.Token,
-			Path:      request.CubbyPath,
-		}
-	case "wrapped-token":
-		unsealer = WrappedTokenUnsealer{
-			TempToken: request.Token,
-		}
-	case "aws":
-		unsealer = AwsUnsealer{
-			Role:  request.AwsRole,
-			Nonce: request.AwsNonce,
-		}
-	default:
-		c.JSON(400, struct {
-			Status string `json:"status"`
-			Ok     bool   `json:"ok"`
-			Error  string `json:"error"`
-		}{string(state.Status), false, errUnknownAuthMethod.Error()})
-		return
-	}
-
-	if err := unseal(unsealer); err == nil {
-		c.JSON(200, struct {
-			Status string `json:"status"`
-			Ok     bool   `json:"ok"`
-		}{string(state.Status), true})
-	} else if err == errAlreadyUnsealed {
-		c.JSON(200, struct {
-			Status string `json:"status"`
-			Ok     bool   `json:"ok"`
-			Error  string `json:"error"`
-		}{string(state.Status), true, err.Error()})
 	} else {
-		c.JSON(403, struct {
-			Status string `json:"status"`
-			Ok     bool   `json:"ok"`
-			Error  string `json:"error"`
-		}{string(state.Status), false, err.Error()})
+		g.ErrorResponse(w, http.StatusBadRequest, "JSON body could not be decoded: "+err.Error())
 	}
-
 }
 
-func Seal(c *gin.Context) {
-	seal()
-	c.JSON(200, struct {
-		Status string `json:"status"`
-		Ok     bool   `json:"ok"`
-	}{string(state.Status), true})
+func (g *Gatekeeper) requestToken(w http.ResponseWriter, r *http.Request) {
+	log := GetLog(r)
+	if r.Header.Get("Gatekeeper-Proxy") != "" {
+		LogEntrySetField(r, "proxied", true)
+	}
+	var body struct {
+		Scheduler string `json:"scheduler"`
+		TaskId    string `json:"task_id"`
+		Role      string `json:"role"`
+	}
+	if g.IsUnsealed() {
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			if token, ttl, err := g.RequestToken(body.Scheduler, body.TaskId, body.Role, r.RemoteAddr); err == nil {
+				resp := struct {
+					Unsealed  bool   `json:"unsealed"`
+					Token     string `json:"token"`
+					Ttl       string `json:"ttl"`
+					VaultAddr string `json:"vault_addr"`
+				}{
+					Unsealed:  g.IsUnsealed(),
+					Token:     token,
+					Ttl:       ttl.String(),
+					VaultAddr: vault.Addr(),
+				}
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(resp)
+			} else {
+				switch err {
+				case scheduler.ErrTaskNotFound, ErrHostMismatch:
+					g.ErrorResponse(w, http.StatusUnauthorized, err.Error())
+				case ErrTaskNotFresh, ErrRoleMismatch, ErrNoSuchRole:
+					g.ErrorResponse(w, http.StatusForbidden, err.Error())
+				case ErrMaxTokensGiven:
+					g.ErrorResponse(w, http.StatusTooManyRequests, err.Error())
+				default:
+					g.ErrorResponse(w, http.StatusInternalServerError, err.Error())
+				}
+			}
+		} else {
+			g.ErrorResponse(w, http.StatusBadRequest, "JSON body could not be decoded: "+err.Error())
+		}
+	} else {
+		if len(g.Peers()) > 0 && r.Header.Get("Gatekeeper-Proxy") == "" {
+			for _, peer := range g.Peers() {
+				if peer.Unsealed {
+					req, err := goreq.Request{
+						Uri:    peer.TokenUri(),
+						Method: "POST",
+						Body:   body,
+					}.WithHeader("Gatekeeper-Proxy", g.PeerId).WithHeader("User-Agent", r.UserAgent()).Do()
+					if err == nil {
+						w.WriteHeader(req.StatusCode)
+						io.Copy(w, req.Body)
+						return
+					} else {
+						log.Warnf("Failed to communicate with peer %v: %v", peer, err)
+						g.ErrorResponse(w, http.StatusServiceUnavailable, "Unable to provide token: Gatekeeper is sealed.")
+						return
+					}
+				}
+			}
+		}
+		g.ErrorResponse(w, http.StatusServiceUnavailable, "Unable to provide token: Gatekeeper is sealed.")
+	}
 }
 
-func ReloadPolicies(c *gin.Context) {
-	state.RLock()
-	status := state.Status
-	token := state.Token
-	state.RUnlock()
-
-	if status == StatusSealed {
-		c.JSON(503, struct {
-			Status string `json:"status"`
-			Ok     bool   `json:"ok"`
-			Error  string `json:"error"`
-		}{string(state.Status), false, "Gatekeeper is sealed."})
-		return
-	}
-
-	state.Lock()
-	if err := activePolicies.Load(token); err == nil {
-		state.Unlock()
-		c.JSON(200, struct {
-			Status string `json:"status"`
-			Ok     bool   `json:"ok"`
-		}{string(state.Status), true})
+func (g *Gatekeeper) reloadPolicies(w http.ResponseWriter, r *http.Request) {
+	log := GetLog(r)
+	if g.IsUnsealed() {
+		log.Infof("Reloading policies...")
+		if policies, err := g.loadPolicies(); err == nil {
+			g.Lock()
+			g.Policies = policies
+			numPolicies := policies.Len()
+			g.Unlock()
+			if r.Header.Get("Gatekeeper-Proxy") == "" {
+				for _, peer := range g.Peers() {
+					if peer.Unsealed {
+						req, err := goreq.Request{
+							Uri:    peer.ReloadUri(),
+							Method: "POST",
+						}.WithHeader("Gatekeeper-Proxy", g.PeerId).WithHeader("User-Agent", r.UserAgent()).Do()
+						if err != nil {
+							log.Warnf("Failed to communicate with peer %s: %v", peer, err)
+						} else {
+							req.Body.Close()
+						}
+					}
+				}
+			}
+			log.Infof("Policies reloaded. %d total policies.", numPolicies)
+			g.OkResponse(w, "Policies reloaded. "+strconv.Itoa(numPolicies)+" total policies.")
+		} else {
+			log.Warnf("Failed to reload policies: %v", err)
+			g.ErrorResponse(w, http.StatusInternalServerError, "There was an error attempting to reload the policies. Please check the gatekeeper logs for more info.")
+		}
 	} else {
-		state.Unlock()
-		c.JSON(500, struct {
-			Status string `json:"status"`
-			Ok     bool   `json:"ok"`
-			Error  string `json:"error"`
-		}{string(state.Status), false, err.Error()})
+		g.ErrorResponse(w, http.StatusServiceUnavailable, "Failed to reload policies: gatekeeper is sealed.")
 	}
 }

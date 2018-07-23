@@ -1,0 +1,6 @@
+{
+	"mesos:*":{
+		"roles":["sample"],
+		"num_uses":1
+	}
+}
