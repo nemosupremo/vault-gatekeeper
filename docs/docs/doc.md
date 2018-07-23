@@ -27,7 +27,7 @@ $ vault policy write gatekeeper ./gatekeeper-policy.hcl
 Then create a `gatekeeper` AppRole. Ensure to set the `period` on the configuration so that the token can be renewed indefinitely.
 
 ```sh
-$ ./vault write auth/approle/role/gatekeeper \
+$ vault write auth/approle/role/gatekeeper \
     secret_id_ttl=10m \
     secret_id_num_uses=1 \
     policies=gatekeeper \
@@ -121,7 +121,7 @@ This should deliver a response wrapped token, that you will then have to unwrap 
 
 Gatekeeper server can be started by running the `server` command. For example `gatekeeper server` or `docker run nemosupremo/vault-gatekeeper server`.
 
-The section will cover configuring the Gatekeeper server. Gatekeeper can be configured with command line options, or environment variables. The environment variables are named the same as the command line options, except they are all UPPERCASE and the dashes (`-`) will become underscores (`_`).
+The section will cover configuring the Gatekeeper server. Gatekeeper can be configured with command line options, or environment variables. The environment variables are named the same as the command line options, except they are all UPPERCASE and the dashes (`-`) will become underscores (`_`). For example the `--listen-addr` command line flag can also be set with the `LISTEN_ADDR` environment variable.
 
 ### HTTP Configuration
 
