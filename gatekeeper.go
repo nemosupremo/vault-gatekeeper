@@ -1,187 +1,631 @@
-package main
+package gatekeeper
 
 import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"flag"
-	"fmt"
-	"github.com/channelmeter/vault-gatekeeper-mesos/gatekeeper"
-	"github.com/franela/goreq"
-	"github.com/gin-gonic/gin"
-	"log"
+	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"strconv"
+	"path"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/franela/goreq"
+	gkClient "github.com/nemosupremo/vault-gatekeeper/gatekeeper"
+	"github.com/nemosupremo/vault-gatekeeper/policy"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/usagestore"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
+	"github.com/segmentio/ksuid"
+	log "github.com/sirupsen/logrus"
 )
 
-type GkStatus string
+var ErrSealed = errors.New("Gatekeeper is sealed.")
+var ErrTaskNotFresh = errors.New("This task has been running too long to request a token.")
+var ErrMaxTokensGiven = errors.New("Maximum number of tokens given to this task.")
+var ErrNoPolicy = errors.New("Your task doesn't match any configured policy.")
+var ErrRoleMismatch = errors.New("Your task does not have permission to use this role.")
+var ErrNoSuchRole = errors.New("The role requested does not exist.")
+var ErrNoPolicyConfigured = errors.New("No policies have been configured.")
+var ErrHostMismatch = errors.New("The service's remote address requesting this token does not match the host of the service running this task.")
 
-const (
-	StatusSealed   GkStatus = "Sealed"
-	StatusUnsealed GkStatus = "Unsealed"
-)
-
-var gitNearestTag = "dev"
-
-var config struct {
-	Vault struct {
-		Server     string
-		Insecure   bool
-		CaCert     string
-		CaPath     string
-		GkPolicies string
-		GkPoliciesNested  bool
-	}
-	DefaultRenewable bool
-	SelfRecreate     bool
-	SealHttpStatus   int
+type Config struct {
 	ListenAddress    string
 	TlsCert          string
 	TlsKey           string
-	Provider         string
-	Mesos            string
-	MaxTaskLife      time.Duration
-	AppIdAuth        AppIdUnsealer
-	CubbyAuth        CubbyUnsealer
-	WrappedTokenAuth WrappedTokenUnsealer
-	AwsEc2Login      bool
-	AwsEc2           AwsUnsealer
+	DefaultScheduler string
+	Schedulers       []string
+	Store            string
+	StoreVaultPath   string
+	Peers            string
+	HostCheck        bool
+	UseImageNames    bool
+
+	Vault struct {
+		Address      string
+		CaCert       string
+		CaPath       string
+		ClientCert   string
+		ClientKey    string
+		Insecure     bool
+		KvVersion    string
+		AppRoleMount string
+	}
+
+	Metrics struct {
+		Ticker time.Duration
+		Statsd struct {
+			Host    string
+			Prefix  string
+			Influx  bool
+			Datadog bool
+		}
+	}
+
+	PolicyPath  string
+	MaxTaskLife time.Duration
+
+	Unsealer unsealer.Unsealer
+
+	Version string
+
+	SkipPolicyLoading bool
 }
 
-var state struct {
-	Status GkStatus `json:"status"`
-	Stats  struct {
+type peer struct {
+	Protocol string `json:"-"`
+	Host     string `json:"-"`
+	Id       string `json:"id"`
+	Address  string `json:"address"`
+	Unsealed bool   `json:"unsealed"`
+	Version  string `json:"version"`
+}
+
+func (p peer) address() string {
+	var u url.URL
+	u.Scheme = p.Protocol
+	u.Host = p.Host
+	u.Path = "/"
+	return u.String()
+}
+
+func (p peer) TokenUri() string {
+	var u url.URL
+	u.Scheme = p.Protocol
+	u.Host = p.Host
+	u.Path = "/token"
+	return u.String()
+}
+
+func (p peer) ReloadUri() string {
+	var u url.URL
+	u.Scheme = p.Protocol
+	u.Host = p.Host
+	u.Path = "/policies/reload"
+	return u.String()
+}
+
+func (p peer) String() string {
+	var u url.URL
+	u.Scheme = p.Protocol
+	u.Host = p.Host
+	s := "sealed"
+	if p.Unsealed {
+		s = "unsealed"
+	}
+	u.User = url.UserPassword(p.Id, s)
+	return u.String()
+}
+
+type Gatekeeper struct {
+	config Config
+
+	Store      usagestore.UsageStore
+	Schedulers map[string]scheduler.Scheduler
+	Policies   *policy.Policies `json:"-"`
+	Stats      struct {
 		Requests   int32 `json:"requests"`
 		Successful int32 `json:"successful"`
 		Denied     int32 `json:"denied"`
+		Failed     int32 `json:"failed"`
 	} `json:"stats"`
-	Started  time.Time     `json:"started"`
-	Token    string        `json:"-"`
-	OnSealed chan struct{} `json:"-"`
+	Started time.Time `json:"started"`
+	Token   string    `json:"-"`
+	metrics *metrics
+	PeerId  string `json:"peer_id"`
+	peers   atomic.Value
+	renewer struct {
+		control chan struct{}
+		wg      sync.WaitGroup
+	}
+
 	sync.RWMutex
-
-	// TODO: Remove this when we can incorporate Mesos in testing environment
-	testingTaskId string
 }
 
-var errAlreadyUnsealed = errors.New("Already unsealed.")
-var errUnknownAuthMethod = errors.New("Unknown method for authorization.")
-
-func defaultEnvVar(key string, def string) (val string) {
-	val = os.Getenv(key)
-	if val == "" {
-		val = def
+func NewGatekeeper(conf Config) (*Gatekeeper, error) {
+	g := &Gatekeeper{
+		config:     conf,
+		Started:    time.Now(),
+		Schedulers: make(map[string]scheduler.Scheduler),
+		PeerId:     ksuid.New().String(),
 	}
-	return
-}
 
-func init() {
-	flag.StringVar(&config.ListenAddress, "listen", defaultEnvVar("LISTEN_ADDR", ":9201"), "Hostname and port to listen on. (Overrides the LISTEN_ADDR environment variable if set.)")
-	flag.StringVar(&config.TlsCert, "tls-cert", defaultEnvVar("TLS_CERT", ""), "Path to TLS certificate. If this value is set, gatekeeper will be served over TLS. File reread on SIGHUP.")
-	flag.StringVar(&config.TlsKey, "tls-key", defaultEnvVar("TLS_KEY", ""), "Path to TLS key. If this value is set, gatekeeper will be served over TLS. File reread on SIGHUP.")
-
-	flag.StringVar(&config.Provider, "provider", defaultEnvVar("DOCKER_PROVIDER", "mesos"), "Docker runtime provider (Supports mesos, ecs or test). (Overrides the DOCKER_PROVIDER environment variable if set.)")
-
-	flag.StringVar(&config.Mesos, "mesos", defaultEnvVar("MESOS_MASTER", ""), "Address to mesos master. (Overrides the MESOS_MASTER environment variable if set.)")
-
-	flag.StringVar(&config.Vault.Server, "vault", defaultEnvVar("VAULT_ADDR", ""), "Address to vault server. (Overrides the VAULT_ADDR environment variable if set.)")
-	flag.StringVar(&config.Vault.GkPolicies, "policies", defaultEnvVar("GATE_POLICIES", "/gatekeeper"), "Path to the json formatted policies configuration file on the vault generic backend.")
-	flag.BoolVar(&config.Vault.GkPoliciesNested, "policies-nested", func() bool {
-		b, err := strconv.ParseBool(defaultEnvVar("GATE_POLICIES_NESTED", "0"))
-		return err == nil && b
-	}(), "Option to load nested policies from paths below the path identified by GkPolicies. Will still include any policies found at GkPolicies path. Duplicate names skipped.")
-
-	flag.BoolVar(&config.Vault.Insecure, "tls-skip-verify", func() bool {
-		b, err := strconv.ParseBool(defaultEnvVar("VAULT_SKIP_VERIFY", "0"))
-		return err == nil && b
-	}(), "Do not verify TLS certificate. (Overrides the VAULT_SKIP_VERIFY environment variable if set.)")
-	flag.StringVar(&config.Vault.CaCert, "ca-cert", defaultEnvVar("VAULT_CACERT", ""), "Path to a PEM encoded CA cert file to use to verify the Vault server SSL certificate. (Overrides the VAULT_CACERT environment variable if set.)")
-	flag.StringVar(&config.Vault.CaPath, "ca-path", defaultEnvVar("VAULT_CAPATH", ""), "Path to a directory of PEM encoded CA cert files to verify the Vault server SSL certificate. (Overrides the VAULT_CAPATH environment variable if set.)")
-
-	flag.StringVar(&config.CubbyAuth.TempToken, "cubby-token", defaultEnvVar("CUBBY_TOKEN", ""), "Temporary vault authorization token that has a cubbyhole secret in CUBBY_PATH that contains the permanent vault token.")
-	flag.StringVar(&config.CubbyAuth.Path, "cubby-path", defaultEnvVar("CUBBY_PATH", "/vault-token"), "Path to key in cubbyhole. By default this is /vault-token.")
-
-	flag.StringVar(&config.WrappedTokenAuth.TempToken, "wrapped-token-auth", defaultEnvVar("WRAPPED_TOKEN_AUTH", ""), "Temporary vault authorization token that has a wrapped permanent vault token.")
-
-	flag.StringVar(&config.AppIdAuth.AppId, "auth-appid", defaultEnvVar("APP_ID", ""), "Vault App Id for authenication. (Overrides the APP_ID environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdMethod, "auth-userid-method", defaultEnvVar("USER_ID_METHOD", ""), "Vault User Id authenication method (either 'mac' or 'file'). (Overrides the USER_ID_METHOD environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdInterface, "auth-userid-interface", defaultEnvVar("USER_ID_INTERFACE", ""), "Network interface for 'mac' user id authenication method. (Overrides the USER_ID_INTERFACE environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdPath, "auth-userid-path", defaultEnvVar("USER_ID_PATH", ""), "File path for 'file' user id authenication method. (Overrides the USER_ID_PATH environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdHash, "auth-userid-hash", defaultEnvVar("USER_ID_HASH", ""), "Hash the user id with the following algorithim (sha256, sha1, md5). The hex representation of the hash will be used. (Overrides the USER_ID_HASH environment variable if set.)")
-	flag.StringVar(&config.AppIdAuth.UserIdSalt, "auth-userid-salt", defaultEnvVar("USER_ID_SALT", ""), "If hashing, salt the hash in the format 'salt$user_id'. (Overrides the USER_ID_SALT environment variable if set.)")
-
-	flag.BoolVar(&config.AwsEc2Login, "auth-aws-ec2", func() bool {
-		b, err := strconv.ParseBool(defaultEnvVar("AWS_EC2_LOGIN", "0"))
-		return err == nil && b
-	}(), "Use AWS EC2 pkcs7 authentication. (Overrides the AWS_EC2_LOGIN environment variable if set.)")
-	flag.StringVar(&config.AwsEc2.Role, "auth-aws-ec2-role", defaultEnvVar("AWS_ROLE", ""), "Vault AWS-EC2 role for authentication (Overrides the AWS_ROLE environment variable if set.)")
-	flag.StringVar(&config.AwsEc2.Nonce, "auth-aws-ec2-nonce", defaultEnvVar("AWS_NONCE", ""), "Vault AWS-EC2 nonce for repeated authentication (Overrides the AWS_NONCE variable if set.")
-
-	flag.BoolVar(&config.SelfRecreate, "self-recreate-token", func() bool {
-		b, err := strconv.ParseBool(defaultEnvVar("RECREATE_TOKEN", "0"))
-		return err == nil && b
-	}(), "When the current token is reaching it's MAX_TTL (720h by default), recreate the token with the same policy instead of trying to renew (requires a sudo/root token, and for the token to have a ttl).")
-
-	flag.BoolVar(&config.DefaultRenewable, "default-renewable-tokens", func() bool {
-		b, err := strconv.ParseBool(defaultEnvVar("DEFAULT_RENEWABLE", "1"))
-		return err == nil && b
-	}(), "The default value for renewable on tokens created.")
-
-	flag.IntVar(&config.SealHttpStatus, "seal-http-status", func() int {
-		b, err := strconv.ParseInt(defaultEnvVar("SEAL_HTTP_STATUS", "200"), 10, 0)
-		if err != nil {
-			return 200
-		} else {
-			return int(b)
+	if g.config.Vault.Insecure ||
+		g.config.Vault.CaCert != "" ||
+		g.config.Vault.CaPath != "" ||
+		g.config.Vault.ClientCert != "" ||
+		g.config.Vault.ClientKey != "" {
+		tr := &http.Transport{
+			Dial:            goreq.DefaultDialer.Dial,
+			Proxy:           http.ProxyFromEnvironment,
+			TLSClientConfig: &tls.Config{},
 		}
-	}(), "Configures HTTP Status Code to be returned when querying /status.json. By default uses 200 in both cases, but can be configured to return 429, for example, if the status is sealed. (Overrides the SEAL_HTTP_STATUS variable if set.)")
+		if g.config.Vault.Insecure {
+			tr.TLSClientConfig.InsecureSkipVerify = true
+		}
 
-	if d, err := time.ParseDuration(defaultEnvVar("TASK_LIFE", "2m")); err == nil {
-		flag.DurationVar(&config.MaxTaskLife, "task-life", d, "The maximum amount of time that a task can be alive during which it can ask for a authorization token.")
+		if g.config.Vault.CaPath != "" || g.config.Vault.CaCert != "" {
+			LoadCA := func() (*x509.CertPool, error) {
+				if g.config.Vault.CaCert != "" {
+					return gkClient.LoadCACert(g.config.Vault.CaCert)
+				} else if g.config.Vault.CaPath != "" {
+					return gkClient.LoadCAPath(g.config.Vault.CaPath)
+				}
+				panic("invariant violation")
+			}
+			if certs, err := LoadCA(); err == nil {
+				tr.TLSClientConfig.RootCAs = certs
+			} else {
+				return nil, errors.New("Failed to read server root certs: " + err.Error())
+			}
+		}
+
+		if g.config.Vault.ClientCert != "" || g.config.Vault.ClientKey != "" {
+			if cert, err := tls.LoadX509KeyPair(g.config.Vault.ClientCert, g.config.Vault.ClientKey); err == nil {
+				tr.TLSClientConfig.Certificates = []tls.Certificate{cert}
+				tr.TLSClientConfig.BuildNameToCertificate()
+			} else {
+				return nil, errors.New("Failed to read client certs: " + err.Error())
+			}
+		}
+
+		goreq.DefaultTransport = tr
+		goreq.DefaultClient = &http.Client{Transport: goreq.DefaultTransport}
+	}
+
+	if len(g.config.PolicyPath) == 0 {
+		return nil, errors.New("Invalid policy path.")
+	}
+
+	if len(conf.Schedulers) == 0 {
+		return nil, errors.New("No schedulers were provided.")
+	}
+
+	for _, sched := range conf.Schedulers {
+		if sched == "_null_cmd" {
+			continue
+		}
+		if f, ok := scheduler.Get(sched); ok {
+			if s, err := f(); err == nil {
+				g.Schedulers[sched] = s
+			} else {
+				return nil, errors.New("Failed to instatiate scheduler '" + sched + "': " + err.Error())
+			}
+		} else {
+			return nil, errors.New("Could not instatiate '" + sched + "'. This scheduler is not registered.")
+		}
+	}
+
+	switch conf.Store {
+	case "memory":
+		var err error
+		if g.Store, err = usagestore.NewInMemoryUsageStore(); err != nil {
+			return nil, err
+		}
+	case "vault":
+		var err error
+		if g.Store, err = usagestore.NewVaultStore(g.config.StoreVaultPath); err != nil {
+			return nil, err
+		}
+	case "_null_cmd":
+
+	default:
+		return nil, errors.New("Could not instatiate '" + conf.Store + "'. This store is not recognized.")
+	}
+
+	if len(conf.Peers) > 0 {
+		if conf.Store == "memory" {
+			return nil, errors.New("The peers option was set, but the usage-store type is memory. The memory store does not support high availability.")
+		}
+	}
+
+	if metrics, err := g.NewMetrics(conf); err == nil {
+		g.metrics = metrics
 	} else {
-		panic(d)
+		return nil, err
+	}
+
+	if len(g.config.Peers) > 0 {
+		if peers, err := g.LoadPeers(g.PeerId, true); err == nil {
+			g.peers.Store(peers)
+		} else {
+			return nil, err
+		}
+	} else {
+		g.peers.Store([]peer{})
+	}
+
+	if conf.Unsealer != nil {
+		if err := g.Unseal(conf.Unsealer); err == ErrNoPolicyConfigured {
+			return nil, err
+		}
+	}
+
+	return g, nil
+}
+
+func (g *Gatekeeper) Unseal(u unsealer.Unsealer) error {
+	log.Infof("Attempting to unseal with '%s' method.", u.Name())
+	g.Lock()
+
+	if token, err := u.Token(); err == nil {
+		log.Infof("Successfully unsealed with '%s' method.", u.Name())
+		g.Token = token
+		if g.config.SkipPolicyLoading {
+			g.Unlock()
+			return nil
+		}
+		if policies, err := g.loadPolicies(); err == nil {
+			log.Infof("Loaded policies. %d total policies.", policies.Len())
+			g.Policies = policies
+			if g.renewer.control != nil {
+				close(g.renewer.control)
+				g.renewer.control = nil
+			}
+			g.renewer.wg.Wait()
+			g.renewer.wg.Add(1)
+			g.renewer.control = make(chan struct{})
+			go g.RenewalWorker(g.renewer.control)
+			g.Unlock()
+			return nil
+		} else {
+			g.Token = ""
+			log.Warnf("Failed to load policies! Gatekeeper will remain sealed as no policies were loaded. Error: %v", err)
+			g.Unlock()
+			return ErrNoPolicyConfigured
+		}
+	} else {
+		g.Unlock()
+		log.Warnf("Failed to unseal gatekeeper: %v", err.Error())
+		return err
 	}
 }
 
-func recreateToken(token string, policies []string, ttl int) (string, error) {
-	tokenOpts := struct {
-		Ttl      string            `json:"ttl,omitempty"`
-		Policies []string          `json:"policies"`
-		Meta     map[string]string `json:"meta,omitempty"`
-		NumUses  int               `json:"num_uses"`
-		NoParent bool              `json:"no_parent"`
-	}{time.Duration(time.Duration(ttl) * time.Second).String(), policies, map[string]string{"info": "auto-created"}, 0, true}
-	if newToken, err := createToken(token, tokenOpts); err == nil {
-		state.Lock()
-		state.Token = newToken
-		state.Unlock()
-		return newToken, nil
+func (g *Gatekeeper) Seal() error {
+	g.Lock()
+	defer g.Unlock()
+	g.Token = ""
+	if g.renewer.control != nil {
+		close(g.renewer.control)
+		g.renewer.control = nil
+	}
+	log.Infof("Gatekeeper sealed.")
+	return nil
+}
+
+func (g *Gatekeeper) IsUnsealed() bool {
+	g.RLock()
+	r := g.Token != ""
+	g.RUnlock()
+	return r
+}
+
+func (g *Gatekeeper) Serve() error {
+	go g.watchPeers()
+	r := g.Routes()
+	if g.config.TlsCert != "" || g.config.TlsKey != "" {
+		return ListenAndServeTLS(g.config.ListenAddress, g.config.TlsCert, g.config.TlsKey, r)
+	}
+	return http.ListenAndServe(g.config.ListenAddress, r)
+}
+
+func (g *Gatekeeper) GetRoleId(roleName string, authToken string) (string, error) {
+	r, err := vault.Request{goreq.Request{
+		Uri:             vault.Path(path.Join("v1/auth", g.config.Vault.AppRoleMount, "role", roleName, "role-id")),
+		MaxRedirects:    10,
+		RedirectHeaders: true,
+	}.WithHeader("X-Vault-Token", authToken)}.Do()
+	if err == nil {
+		switch r.StatusCode {
+		case 200:
+			var resp struct {
+				Data struct {
+					RoleId string `json:"role_id"`
+				} `json:"data"`
+			}
+			if err := r.Body.FromJsonTo(&resp); err == nil {
+				return resp.Data.RoleId, nil
+			} else {
+				return "", err
+			}
+		case 404:
+			return "", ErrNoSuchRole
+		default:
+			var e vault.Error
+			e.Code = r.StatusCode
+			if err := r.Body.FromJsonTo(&e); err == nil {
+				return "", e
+			} else {
+				e.Errors = []string{"communication error."}
+				return "", e
+			}
+		}
 	} else {
 		return "", err
 	}
 }
 
-func renew(token string, ttl int) error {
-	r, err := VaultRequest{goreq.Request{
-		Uri: vaultPath("/v1/auth/token/renew-self", ""),
-		Body: struct {
-			Increment int `json:"increment"`
-		}{ttl},
-		Method:          "POST",
+func (g *Gatekeeper) GetSecretId(roleName string, authToken string) (string, error) {
+	r, err := vault.Request{goreq.Request{
+		Uri:             vault.Path(path.Join("v1/auth", g.config.Vault.AppRoleMount, "role", roleName, "secret-id")),
 		MaxRedirects:    10,
 		RedirectHeaders: true,
-	}.WithHeader("X-Vault-Token", token)}.Do()
+		Method:          "POST",
+	}.WithHeader("X-Vault-Token", authToken)}.Do()
 	if err == nil {
-		defer r.Body.Close()
 		switch r.StatusCode {
 		case 200:
+			var resp struct {
+				Data struct {
+					SecretId string `json:"secret_id"`
+				} `json:"data"`
+			}
+			if err := r.Body.FromJsonTo(&resp); err == nil {
+				return resp.Data.SecretId, nil
+			} else {
+				return "", err
+			}
+		default:
+			var e vault.Error
+			e.Code = r.StatusCode
+			if err := r.Body.FromJsonTo(&e); err == nil {
+				return "", e
+			} else {
+				e.Errors = []string{"communication error."}
+				return "", e
+			}
+		}
+	} else {
+		return "", err
+	}
+}
+
+func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRole string, remoteAddr string) (string, time.Duration, error) {
+	g.metrics.Request()
+	if !g.IsUnsealed() {
+		g.metrics.Denied()
+		return "", 0, ErrSealed
+	}
+	if providerKey == "" {
+		providerKey = g.config.DefaultScheduler
+	}
+	var remoteAddrs []net.IP
+	if remoteAddr != "" {
+		if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+			remoteAddr = host
+		}
+		if ip, err := net.LookupIP(remoteAddr); err == nil {
+			remoteAddrs = ip
+		}
+	}
+	if provider, ok := g.Schedulers[providerKey]; ok {
+		if task, err := provider.LookupTask(taskId); err == nil {
+			if time.Since(task.StartTime()) >= g.config.MaxTaskLife {
+				g.metrics.Denied()
+				return "", 0, ErrTaskNotFresh
+			}
+			if g.config.HostCheck {
+				pass := false
+				for _, remoteAddr := range remoteAddrs {
+					if remoteAddr.Equal(task.IP()) {
+						pass = true
+						break
+					}
+				}
+				if !pass {
+					return "", 0, ErrHostMismatch
+				}
+			}
+
+			taskName := task.Name()
+			if g.config.UseImageNames && task.Image() != "" {
+				taskName = task.Image()
+			}
+
+			policyKey := providerKey + ":" + taskName
+			if task.Group() != "" && !g.config.UseImageNames {
+				policyKey = providerKey + ":" + task.Group() + ":" + taskName
+			}
+
+			if policy, ok := g.Policies.Get(policyKey); ok && len(policy.Roles) > 0 {
+				if err := g.Store.Acquire(g.Token, providerKey+":"+task.Id(), policy.NumUses, g.config.MaxTaskLife+1*time.Minute); err == nil {
+					roleName := policy.Roles[0]
+					if requestedRole != "" {
+						allowed := false
+						for _, role := range policy.Roles {
+							if requestedRole == role {
+								allowed = true
+								break
+							}
+						}
+						if !allowed {
+							g.metrics.Denied()
+							return "", 0, ErrRoleMismatch
+						}
+					}
+					if roleName == "{{name}}" {
+						roleName = task.Name()
+					}
+
+					g.RLock()
+					authToken := g.Token
+					g.RUnlock()
+
+					if roleId, err := g.GetRoleId(roleName, authToken); err == nil {
+						if secretId, err := g.GetSecretId(roleName, authToken); err == nil {
+							uns := unsealer.AppRoleUnsealer{
+								RoleId:   roleId,
+								SecretId: secretId,
+								Endpoint: g.config.Vault.AppRoleMount,
+								Wrap:     100 * time.Minute,
+							}
+							if token, err := uns.Token(); err == nil {
+								g.metrics.Success()
+								return token, uns.Wrap, nil
+							} else {
+								g.metrics.Denied()
+								return "", 0, err
+							}
+						} else {
+							log.Warnf("recieved error when trying to get the secret id for role %s: %v", roleName, err)
+							g.metrics.Failed()
+							return "", 0, err
+						}
+					} else if err == ErrNoSuchRole {
+						g.metrics.Denied()
+						return "", 0, ErrNoSuchRole
+					} else {
+						g.metrics.Failed()
+						log.Warnf("recieved error when trying to get the role id for role %s: %v", roleName, err)
+						return "", 0, err
+					}
+				} else if err == usagestore.ErrPutLimitExceeded {
+					g.metrics.Denied()
+					return "", 0, ErrMaxTokensGiven
+				} else {
+					g.metrics.Denied()
+					return "", 0, err
+				}
+			} else {
+				g.metrics.Denied()
+				return "", 0, ErrNoPolicy
+			}
+		} else if err == scheduler.ErrTaskNotFound {
+			g.metrics.Denied()
+			return "", 0, err
+		} else {
+			g.metrics.Denied()
+			return "", 0, err
+		}
+	} else {
+		return "", 0, errors.New("Provided scheduler '" + providerKey + "' is not configured.")
+	}
+}
+
+func (g *Gatekeeper) RenewalWorker(controlChan chan struct{}) {
+	defer g.renewer.wg.Done()
+	timer := time.NewTimer(1 * time.Hour)
+	readTimer := false
+	for {
+		if ttl, err := g.TokenTtl(); err == nil {
+			if ttl == 0 {
+				// root token
+				return
+			}
+			waitTime := ttl - (10 * time.Second)
+			if waitTime < 0 {
+				waitTime = 0
+			}
+			if !timer.Stop() && !readTimer {
+				<-timer.C
+			}
+			readTimer = false
+			timer.Reset(waitTime)
+			select {
+			case <-timer.C:
+				readTimer = true
+			case <-controlChan:
+				return
+			}
+			if err := g.RenewToken(); err == nil {
+				log.Infof("Renewed Vault Token (original ttl: %v)", ttl)
+			} else {
+				log.Warn("Failed to renew Vault token. Is the policy set correctly? Gatekeeper will now be sealed: %v", err)
+				g.Seal()
+				return
+			}
+		} else {
+			log.Warnf("Looking up our token's ttl caused an error: %v. Is the policy set correctly? Gatekeeper will now be sealed.", err)
+			g.Seal()
+			return
+		}
+	}
+}
+
+func (g *Gatekeeper) TokenTtl() (time.Duration, error) {
+	if !g.IsUnsealed() {
+		return 0, ErrSealed
+	}
+	g.RLock()
+	token := g.Token
+	g.RUnlock()
+	r, err := vault.Request{goreq.Request{
+		Uri:             vault.Path("v1/auth/token/lookup-self"),
+		MaxRedirects:    10,
+		RedirectHeaders: true,
+		Method:          "GET",
+	}.WithHeader("X-Vault-Token", token)}.Do()
+	if err == nil {
+		switch r.StatusCode {
+		case 200:
+			var resp struct {
+				Data struct {
+					Ttl int `json:"ttle`
+				} `json:"data"`
+			}
+			if err := r.Body.FromJsonTo(&resp); err == nil {
+				return time.Duration(resp.Data.Ttl) * time.Second, nil
+			} else {
+				return 0, err
+			}
+		default:
+			var e vault.Error
+			e.Code = r.StatusCode
+			if err := r.Body.FromJsonTo(&e); err == nil {
+				return 0, e
+			} else {
+				e.Errors = []string{"communication error."}
+				return 0, e
+			}
+		}
+	} else {
+		return 0, err
+	}
+}
+
+func (g *Gatekeeper) RenewToken() error {
+	if !g.IsUnsealed() {
+		return ErrSealed
+	}
+	g.RLock()
+	token := g.Token
+	g.RUnlock()
+	r, err := vault.Request{goreq.Request{
+		Uri:             vault.Path("v1/auth/token/renew-self"),
+		MaxRedirects:    10,
+		RedirectHeaders: true,
+		Method:          "POST",
+	}.WithHeader("X-Vault-Token", token)}.Do()
+	if err == nil {
+		switch r.StatusCode {
+		case 200, 204:
 			return nil
 		default:
-			var e vaultError
+			var e vault.Error
 			e.Code = r.StatusCode
 			if err := r.Body.FromJsonTo(&e); err == nil {
 				return e
@@ -195,231 +639,99 @@ func renew(token string, ttl int) error {
 	}
 }
 
-func renew_worker(token string, onUnsealed <-chan struct{}) {
-	creationTtl := 0
+func (g *Gatekeeper) Peers() []peer {
+	return g.peers.Load().([]peer)
+}
+
+func (g *Gatekeeper) watchPeers() {
+	ticker := time.NewTicker(30 * time.Second)
 	for {
-		r, err := VaultRequest{goreq.Request{
-			Uri:             vaultPath("/v1/auth/token/lookup-self", ""),
-			MaxRedirects:    10,
-			RedirectHeaders: true,
-		}.WithHeader("X-Vault-Token", token)}.Do()
-		if err == nil {
-			defer r.Body.Close()
-			if r.StatusCode == 200 {
-				var tokenInfo struct {
-					Data struct {
-						Ttl         int      `json:"ttl"`
-						CreationTtl int      `json:"creation_ttl"`
-						Policies    []string `json:"policies"`
-					} `json:"data"`
-				}
-				if err := r.Body.FromJsonTo(&tokenInfo); err == nil {
-					if creationTtl != 0 {
-						if config.SelfRecreate && (creationTtl-tokenInfo.Data.Ttl) > 10 {
-							// we are hitting the max_ttl on this token
-							log.Println("Tried to renew token, and the new ttl was more than 10 seconds shorter than the expected ttl.")
-							if newToken, err := recreateToken(token, tokenInfo.Data.Policies, creationTtl); err == nil {
-								log.Println("Recreated new token.")
-								token = newToken
+		<-ticker.C
+		if peers, err := g.LoadPeers(g.PeerId, false); err == nil {
+			g.peers.Store(peers)
+		}
+	}
+}
+
+func (g *Gatekeeper) LoadPeers(myId string, startup bool) ([]peer, error) {
+	protocol := "https"
+	var peerHosts []string
+	if path, err := url.Parse(g.config.Peers); err == nil {
+		switch path.Scheme {
+		case "http":
+			protocol = "http"
+			fallthrough
+		case "https":
+			peerHosts = strings.Split(path.Host, ",")
+		default:
+			return nil, errors.New("Invalid option for peers: invalid protocol " + path.Scheme)
+		}
+	} else {
+		peerHosts = strings.Split(g.config.Peers, ",")
+	}
+
+	peers := make(map[string]peer)
+
+	for _, peerHost := range peerHosts {
+		if host, port, err := net.SplitHostPort(peerHost); err == nil {
+			if addrs, err := net.LookupIP(host); err == nil {
+				for _, addr := range addrs {
+					var u url.URL
+					u.Scheme = protocol
+					u.Host = net.JoinHostPort(addr.String(), port)
+					u.Path = "/status"
+					req, err := goreq.Request{
+						Uri: u.String(),
+					}.WithHeader("Peer-Checker", "true").WithHeader("User-Agent", "Gatekeeper Peer "+g.config.Version).Do()
+					if err == nil {
+						defer req.Body.Close()
+						var status struct {
+							Id       string `json:"id"`
+							Unsealed bool   `json:"unsealed"`
+							Version  string `json:"version"`
+						}
+						if err := req.Body.FromJsonTo(&status); err == nil {
+							if status.Id == myId {
 								continue
-							} else {
-								log.Printf("Failed to create new token. The gatekeeper will be sealed when the next renew fails. Error: %v", err)
 							}
-						}
-					}
-					if tokenInfo.Data.CreationTtl == 0 {
-						log.Println("Token has Creation TTL of 0. No need for renew.")
-						return
-					}
-					creationTtl = tokenInfo.Data.CreationTtl
-					if tokenInfo.Data.Ttl > 5 {
-						tokenInfo.Data.Ttl -= 5
-					}
-					select {
-					case <-time.After(time.Duration(tokenInfo.Data.Ttl) * time.Second):
-						log.Printf("Renewing token with ttl of %v.", time.Duration(tokenInfo.Data.CreationTtl)*time.Second)
-						if err := renew(token, tokenInfo.Data.CreationTtl); err == nil {
-							log.Printf("Renewed token with ttl of %v.", time.Duration(tokenInfo.Data.CreationTtl)*time.Second)
+							if _, ok := peers[status.Id]; ok {
+								continue
+							}
+							peers[status.Id] = peer{
+								Protocol: protocol,
+								Host:     u.Host,
+								Id:       status.Id,
+								Unsealed: status.Unsealed,
+								Version:  status.Version,
+							}
 						} else {
-							log.Printf("Failed to renew token. Sealing gatekeeper. Error: %v", err)
-							seal()
-							return
+							log.Warnf("Failed to parse peer at %v: %v", u.Host, err)
 						}
-					case <-onUnsealed:
-						return
+					} else {
+						if startup {
+							log.Warnf("Failed to load peer at %v: %v. If this is the local peer, then this message should be ignored as the server hasn't started listening yet.", u.Host, err)
+						} else {
+							log.Infof("Failed to load peer at %v: %v", u.Host, err)
+						}
 					}
-				} else {
-					log.Printf("Failed to unmarshal token. Not starting renewal watcher. Error: %s ", err)
-					return
 				}
-			} else if r.StatusCode == 403 {
-				log.Println("Token is no longer valid. Sealing gatekeeper.")
-				seal()
-				return
 			} else {
-				log.Printf("Failed to lookup token. Error Code: %d", r.StatusCode)
-				return
+				if startup {
+					log.Warnf("Failed to lookup host peer %v: %v", peerHost, err)
+				} else {
+					log.Infof("Failed to lookup host peer %v: %v", peerHost, err)
+				}
 			}
 		} else {
-			log.Printf("Failed to lookup token. Not starting renewal watcher. Error: %s ", err)
-			return
+			return nil, err
 		}
 	}
-}
 
-func unseal(unsealer Unsealer) error {
-	state.Lock()
-	defer state.Unlock()
-	if state.Status == StatusUnsealed {
-		return errAlreadyUnsealed
+	p := make([]peer, len(peers))
+	i := 0
+	for _, v := range peers {
+		p[i] = v
+		i++
 	}
-	if token, err := unsealer.Token(); err == nil {
-		if err := (&activePolicies).Load(token); err != nil {
-			log.Printf("Failed to load policies: %v", err)
-			return err
-		}
-		log.Printf("The gate has been unsealed with method '%s' using '%s' provider.", unsealer.Name(), config.Provider)
-		state.Token = token
-		state.Status = StatusUnsealed
-		state.OnSealed = make(chan struct{})
-		go renew_worker(token, state.OnSealed)
-		return nil
-	} else {
-		return err
-	}
-}
-
-func seal() error {
-	state.Lock()
-	defer state.Unlock()
-	if state.Status == StatusUnsealed {
-		log.Println("The gate has been sealed.")
-		close(state.OnSealed)
-	}
-	state.OnSealed = nil
-	state.Token = ""
-	state.Status = StatusSealed
-	return nil
-}
-
-func vaultPath(path string, query string) string {
-	u, _ := url.Parse(config.Vault.Server)
-	u.Path = path
-	u.RawQuery = query
-	return u.String()
-}
-
-func intro() {
-	fmt.Println(" __")
-	fmt.Println("/__ _ _|_ _ |/  _  _ |_) _  __")
-	fmt.Println("\\_|(_| |_(/_|\\ (/_(/_|  (/_ |")
-	fmt.Println("github.com/channelmeter/vault-gatekeeper-mesos")
-	fmt.Println("Version: " + gitNearestTag)
-}
-
-func main() {
-	// gin-gonic disables the log flags
-	log.SetFlags(log.LstdFlags)
-	state.Status = StatusSealed
-	state.Started = time.Now()
-	flag.Parse()
-
-	intro()
-
-	if config.Vault.Insecure || config.Vault.CaPath != "" || config.Vault.CaCert != "" {
-		tr := &http.Transport{
-			Dial:            goreq.DefaultDialer.Dial,
-			Proxy:           http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{},
-		}
-		if config.Vault.Insecure {
-			tr.TLSClientConfig.InsecureSkipVerify = true
-		}
-
-		if config.Vault.CaPath != "" || config.Vault.CaCert != "" {
-			LoadCA := func() (*x509.CertPool, error) {
-				if config.Vault.CaPath != "" {
-					return gatekeeper.LoadCAPath(config.Vault.CaPath)
-				} else if config.Vault.CaCert != "" {
-					return gatekeeper.LoadCACert(config.Vault.CaCert)
-				}
-				panic("invariant violation")
-			}
-			if certs, err := LoadCA(); err == nil {
-				tr.TLSClientConfig.RootCAs = certs
-			} else {
-				log.Printf("Failed to read client certs.")
-				log.Println("Error:", err)
-				os.Exit(1)
-			}
-		}
-		// TODO: Fallback to regular client when communicating with Mesos Master
-		goreq.DefaultTransport = tr
-		goreq.DefaultClient = &http.Client{Transport: goreq.DefaultTransport}
-	}
-
-	r := gin.Default()
-	r.SetHTMLTemplate(statusPage)
-	r.GET("/", Status)
-	r.GET("/status.json", Status)
-	r.POST("/seal", Seal)
-	r.POST("/unseal", Unseal)
-	r.POST("/token", Provide)
-	r.POST("/policies/reload", ReloadPolicies)
-
-	if os.Getenv("VAULT_TOKEN") != "" {
-		log.Println("VAULT_TOKEN detected in environment, unsealing with token...")
-		if err := unseal(TokenUnsealer{os.Getenv("VAULT_TOKEN")}); err != nil {
-			log.Println("Failed to unseal using VAULT_TOKEN. Either unset VAULT_TOKEN or provide a valid VAULT_TOKEN.")
-			log.Println("Error:", err)
-			os.Exit(1)
-		}
-		log.Println("Unseal successful with token provided in VAULT_TOKEN.")
-	} else if config.CubbyAuth.TempToken != "" {
-		log.Println("Attempting to unseal with provided Cubbyhole token...")
-		if err := unseal(config.CubbyAuth); err != nil {
-			log.Println("Failed to unseal using Cubbyhole. Please make sure the Cubbyhole auth is correctly setup.")
-			log.Println("Error:", err)
-			os.Exit(1)
-		}
-		log.Println("Unseal successful with token provided by Cubbyhole.")
-	} else if config.WrappedTokenAuth.TempToken != "" {
-		log.Println("Attempting to unseal with Wrapped Token...")
-		if err := unseal(config.WrappedTokenAuth); err != nil {
-			log.Println("Failed to unseal using Wrapped Token. Please make sure the Wrapped Token auth is correctly setup.")
-			log.Println("Error:", err)
-			os.Exit(1)
-		}
-		log.Println("Unseal successful with Wrapped Token.")
-	} else if config.AppIdAuth.AppId != "" {
-		log.Println("Attempting to unseal with provided APP ID credentials, using user_id from '" + config.AppIdAuth.UserIdMethod + "'...")
-		if err := unseal(config.AppIdAuth); err != nil {
-			log.Println("Failed to unseal using APP ID credentials. Provide a valid APP ID credentials.")
-			log.Println("Error:", err)
-			os.Exit(1)
-		}
-		log.Println("Unseal successful with app-id credentials.")
-	} else if config.AwsEc2Login {
-		log.Println("Attempting to unseal with AWS EC2 credentials...")
-		if err := unseal(config.AwsEc2); err != nil {
-			log.Println("Failed to unseal using AWS EC2. Please make sure the AWS EC2 pkcs7 auth is correctly setup.")
-			log.Println("Error:", err)
-			os.Exit(1)
-		}
-		log.Println("Unseal successful with AWS EC2 credentials.")
-	}
-	log.Printf("Listening and serving on '%s'...", config.ListenAddress)
-
-	runFunc := func() error {
-		return r.Run(config.ListenAddress)
-	}
-	if config.TlsCert != "" || config.TlsKey != "" {
-		runFunc = func() error {
-			return ListenAndServeTLS(config.ListenAddress, config.TlsCert, config.TlsKey, r)
-		}
-	}
-	if err := runFunc(); err != nil {
-		log.Println("Failed to start server. Error: " + err.Error())
-		os.Exit(1)
-	}
+	return p, nil
 }

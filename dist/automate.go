@@ -12,10 +12,11 @@ import (
 	"github.com/mholt/archiver"
 )
 
-var buildScript, pkgDir, distDir, buildDir, releaseDir string
+var buildScript, pkgDir, binDir, distDir, buildDir, releaseDir string
 
 func init() {
-	pkgDir = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "channelmeter", "vault-gatekeeper-mesos")
+	pkgDir = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "nemosupremo", "vault-gatekeeper")
+	binDir = filepath.Join(pkgDir, "cmd", "gatekeeper")
 	buildScript = filepath.Join(pkgDir, "build.bash")
 	distDir = filepath.Join(pkgDir, "dist")
 	buildDir = filepath.Join(distDir, "builds")
@@ -62,7 +63,7 @@ func main() {
 			fmt.Printf("== Building %s\n", p)
 
 			var baseFilename, binFilename string
-			baseFilename = fmt.Sprintf("vltgatekeeper_%s_%s", p.os, p.arch)
+			baseFilename = fmt.Sprintf("gatekeeper_%s_%s", p.os, p.arch)
 			if p.arch == "arm" {
 				baseFilename += p.arm
 			}
@@ -98,7 +99,7 @@ func main() {
 
 func build(p platform, out string) error {
 	cmd := exec.Command(buildScript, out)
-	cmd.Dir = pkgDir
+	cmd.Dir = binDir
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "CGO_ENABLED=0")
 	cmd.Env = append(cmd.Env, "GOOS="+p.os)

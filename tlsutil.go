@@ -1,4 +1,4 @@
-package main
+package gatekeeper
 
 // Based on https://stackoverflow.com/a/40883377 and
 // https://github.com/robustirc/bridge/blob/v1.7.1/tlsutil/tlsutil.go.

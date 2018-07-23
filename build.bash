@@ -14,7 +14,7 @@
 set -euo pipefail
 
 : ${output_filename:="${1:-}"}
-: ${output_filename:="vltgatekeeper"}
+: ${output_filename:="gatekeeper"}
 
 : ${git_repo:="${2:-}"}
 : ${git_repo:="."}
