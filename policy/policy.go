@@ -18,13 +18,17 @@ type Policy struct {
 func (p *Policy) merge(path []byte, other Policy) {
 	if len(p.Roles) == 0 && p.NumUses == 0 {
 		*p = other
+		p.Roles = append([]string{}, other.Roles...)
 		p.strictestPath = path
 	} else {
 		if len(path) > len(p.strictestPath) {
 			p.NumUses = other.NumUses
 			p.strictestPath = path
 		}
+		// prepend other.Roles into p.Roles
 		p.Roles = append(p.Roles, other.Roles...)
+		copy(p.Roles[len(other.Roles):], p.Roles)
+		copy(p.Roles, other.Roles)
 	}
 }
 

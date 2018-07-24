@@ -32,6 +32,10 @@ const samplePolicy = `{
 	"mesos:framework:task":{
 		"roles":["mesos_framework_task"],
 		"num_uses":1
+	},
+	"mesos:framework:task2":{
+		"roles":["mesos_framework_task2"],
+		"num_uses":1
 	}
 }`
 
@@ -68,11 +72,23 @@ func TestSamplePolicy(t *testing.T) {
 		}
 
 		if pass, expected, actual := shouldContainAll(mustGet(pols.Get("mesos")), "wildcard", "only_mesos"); !pass {
-			t.Fatalf("Test of '%s' failed. Expected: %v Had: %v", "foo", expected, actual)
+			t.Fatalf("Test of '%s' failed. Expected: %v Had: %v", "mesos", expected, actual)
 		}
 
 		if pass, expected, actual := shouldContainAll(mustGet(pols.Get("mesos:jamp")), "wildcard", "mesos_child"); !pass {
-			t.Fatalf("Test of '%s' failed. Expected: %v Had: %v", "foo", expected, actual)
+			t.Fatalf("Test of '%s' failed. Expected: %v Had: %v", "mesos:jamp", expected, actual)
+		}
+
+		if pass, _, actual := shouldContainAll(mustGet(pols.Get("mesos:framework:task2")), "mesos_framework_task"); pass {
+			t.Fatalf("Test of '%s' failed. 'task2' should not conatain permission of 'task'. Had: %v", "mesos:framework:task", actual)
+		}
+
+		if policy, ok := pols.Get("mesos:framework:task"); ok {
+			if policy.Roles[0] != "mesos_framework_task" {
+				t.Fatalf("Expected most specific role of '%s'. Had: %v", "mesos:framework:task", policy.Roles[0])
+			}
+		} else {
+			t.Fatalf("Test of '%s' failed. Expected: %v Had: %v", "foo", "mesos:framework:task", policy.Roles)
 		}
 	} else {
 		t.Fatalf("Failed to parse policy from json: %v", err)
