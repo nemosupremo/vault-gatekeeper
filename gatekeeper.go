@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -540,6 +541,13 @@ func (g *Gatekeeper) RenewalWorker(controlChan chan struct{}) {
 				return
 			}
 			waitTime := ttl - (10 * time.Second)
+			// refresh jitter so all gatekeeper instances
+			// don't try to renew simultaneously if they were all started
+			// together. If there's an issue with Vault, all the gk instances
+			// won't seal at the same time
+			if waitTime > 10*time.Minute {
+				waitTime -= time.Duration(rand.Intn(7)) * time.Minute
+			}
 			if waitTime < 0 {
 				waitTime = 0
 			}
