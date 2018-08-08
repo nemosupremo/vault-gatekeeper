@@ -34,7 +34,7 @@ func init() {
 		{"vault-client-cert", "", "Path to a PEM-encoded client certificate on the local disk. This file is used for TLS communication with the Vault server. (This is different from the TLS Certificates Auth Method)."},
 		{"vault-client-key", "", "Path to an unencrypted, PEM-encoded private key on disk which corresponds to the matching client certificate. (This is different from the TLS Certificates Auth Method)."},
 		{"vault-skip-verify", false, "Skip TLS verification of Vault's SSL certificate."},
-		{"vault-kv-version", defaultVaultKvVer, "Vault KV backend version that is used for the policy-path. Either v1 or v2."},
+		{"vault-kv-version", defaultVaultKvVer, "Vault KV backend version that is used for the policy-path. Either '1' or '2'."},
 		{"vault-approle-mount", "approle", "Vault AppRole mount in your configuration."},
 
 		{"task-grace", 2 * time.Minute, "Task grace period, during which a task can request a token. If a task attempts to ask for a token after this period, it will be rejected."},

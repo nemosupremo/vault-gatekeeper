@@ -221,6 +221,22 @@ func NewGatekeeper(conf Config) (*Gatekeeper, error) {
 		}
 	}
 
+	if conf.Store == "vault" && conf.Vault.KvVersion == "1" {
+		baseStoreVault := strings.Split(conf.StoreVaultPath, "/")[0]
+		baseStorePolicy := strings.Split(conf.PolicyPath, "/")[0]
+		if baseStorePolicy == "v1" {
+			baseStorePolicy = strings.Split(conf.PolicyPath, "/")[1]
+		}
+		if baseStoreVault == "v1" {
+			baseStoreVault = strings.Split(conf.StoreVaultPath, "/")[1]
+		}
+		if baseStoreVault == baseStorePolicy {
+			return nil, errors.New("The secret backend provided to policy path is version 1, and that same secret mount point is being used for the vault" +
+				" usage store. The vault usage store requires that the secret mount point is version 2. Either upgrade your secret backend to version 2 or" +
+				" mount a new secret backend with version 2 and pass a path on that backend to 'usage-store-vault-path'.")
+		}
+	}
+
 	switch conf.Store {
 	case "memory":
 		var err error
