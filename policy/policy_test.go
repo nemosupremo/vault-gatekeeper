@@ -36,6 +36,10 @@ const samplePolicy = `{
 	"mesos:framework:task2":{
 		"roles":["mesos_framework_task2"],
 		"num_uses":1
+	},
+	"mesos:framework:service/*": {
+	    "roles":["mesos_framework_service"],
+	    "num_uses":1
 	}
 }`
 
@@ -77,6 +81,10 @@ func TestSamplePolicy(t *testing.T) {
 
 		if pass, expected, actual := shouldContainAll(mustGet(pols.Get("mesos:jamp")), "wildcard", "mesos_child"); !pass {
 			t.Fatalf("Test of '%s' failed. Expected: %v Had: %v", "mesos:jamp", expected, actual)
+		}
+
+		if pass, expected, actual := shouldContainAll(mustGet(pols.Get("mesos:framework:service/instance-1")), "wildcard", "mesos_child", "mesos_framework_child", "mesos_framework_service"); !pass {
+			t.Fatalf("Test of '%s' failed. Expected: %v Had: %v", "mesos:framework:service/instance-1", expected, actual)
 		}
 
 		if pass, _, actual := shouldContainAll(mustGet(pols.Get("mesos:framework:task2")), "mesos_framework_task"); pass {
