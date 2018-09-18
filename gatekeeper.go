@@ -357,6 +357,7 @@ func (g *Gatekeeper) GetRoleId(roleName string, authToken string) (string, error
 		RedirectHeaders: true,
 	}.WithHeader("X-Vault-Token", authToken)}.Do()
 	if err == nil {
+		defer r.Body.Close()
 		switch r.StatusCode {
 		case 200:
 			var resp struct {
@@ -394,6 +395,7 @@ func (g *Gatekeeper) GetSecretId(roleName string, authToken string) (string, err
 		Method:          "POST",
 	}.WithHeader("X-Vault-Token", authToken)}.Do()
 	if err == nil {
+		defer r.Body.Close()
 		switch r.StatusCode {
 		case 200:
 			var resp struct {
@@ -607,6 +609,7 @@ func (g *Gatekeeper) TokenTtl() (time.Duration, error) {
 		Method:          "GET",
 	}.WithHeader("X-Vault-Token", token)}.Do()
 	if err == nil {
+		defer r.Body.Close()
 		switch r.StatusCode {
 		case 200:
 			var resp struct {
@@ -648,6 +651,7 @@ func (g *Gatekeeper) RenewToken() error {
 		Method:          "POST",
 	}.WithHeader("X-Vault-Token", token)}.Do()
 	if err == nil {
+		defer r.Body.Close()
 		switch r.StatusCode {
 		case 200, 204:
 			return nil
