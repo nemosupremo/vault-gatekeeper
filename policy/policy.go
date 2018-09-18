@@ -13,6 +13,7 @@ type Policy struct {
 	Roles         []string `json:"roles"`
 	NumUses       int      `json:"num_uses"`
 	strictestPath []byte
+	wildcard      bool
 }
 
 func (p *Policy) merge(path []byte, other Policy) {
@@ -51,6 +52,9 @@ func LoadPoliciesFromJson(data []byte) (*Policies, error) {
 		tree := iradix.New()
 		txn := tree.Txn()
 		for k, v := range pol {
+			if strings.HasSuffix(k, "*") {
+				v.wildcard = true
+			}
 			if strings.HasSuffix(k, ":") {
 				return nil, errors.New("Invalid key name '" + k + "'. Keys must not end with a ':'")
 			}
@@ -79,7 +83,10 @@ func (p *Policies) Get(path string) (*Policy, bool) {
 
 	walkFn := func(k []byte, _v interface{}) bool {
 		v := _v.(Policy)
-		if bytes.Equal(k, []byte(path)) || k[len(k)-1] == ':' {
+		if v.wildcard && bytes.HasPrefix([]byte(path), k) {
+			ret.merge(k, v)
+			foundPolicy = true
+		} else if bytes.Equal(k, []byte(path)) {
 			ret.merge(k, v)
 			foundPolicy = true
 		}
