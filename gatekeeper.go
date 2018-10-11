@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/franela/goreq"
 	gkClient "github.com/nemosupremo/vault-gatekeeper/gatekeeper"
 	"github.com/nemosupremo/vault-gatekeeper/policy"
@@ -553,12 +554,31 @@ func (g *Gatekeeper) RenewalWorker(controlChan chan struct{}) {
 	timer := time.NewTimer(1 * time.Hour)
 	readTimer := false
 	for {
-		if ttl, err := g.TokenTtl(); err == nil {
+		b := backoff.NewExponentialBackOff()
+		b.MaxElapsedTime = 2 * time.Minute
+		var (
+			ttl time.Duration
+			err error
+		)
+
+		retryable := func() (err error) {
+			ttl, err = g.TokenTtl()
+			return
+		}
+
+		notify := func(err error, t time.Duration){
+			log.Warnf("Looking up our token's ttl caused an error: %v. Retrying", err)
+		}
+
+		err = backoff.RetryNotify(retryable, b, notify)
+
+		if err == nil {
 			if ttl == 0 {
 				// root token
 				return
 			}
-			waitTime := ttl - (10 * time.Second)
+			// Start renewals at 50% of remaining TTL to allow room for retries.
+			waitTime := ttl / 2
 			// refresh jitter so all gatekeeper instances
 			// don't try to renew simultaneously if they were all started
 			// together. If there's an issue with Vault, all the gk instances
@@ -583,9 +603,7 @@ func (g *Gatekeeper) RenewalWorker(controlChan chan struct{}) {
 			if err := g.RenewToken(); err == nil {
 				log.Infof("Renewed Vault Token (original ttl: %v)", ttl)
 			} else {
-				log.Warn("Failed to renew Vault token. Is the policy set correctly? Gatekeeper will now be sealed: %v", err)
-				g.Seal()
-				return
+				log.Warnf("Failed to renew Vault token. Is the policy set correctly? Error: %v", err)
 			}
 		} else {
 			log.Warnf("Looking up our token's ttl caused an error: %v. Is the policy set correctly? Gatekeeper will now be sealed.", err)

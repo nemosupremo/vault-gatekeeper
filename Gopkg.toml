@@ -30,6 +30,10 @@
   version = "1.14.31"
 
 [[constraint]]
+  name = "github.com/cenkalti/backoff"
+  version = "v2.0.0"
+
+[[constraint]]
   branch = "master"
   name = "github.com/franela/goreq"
 
