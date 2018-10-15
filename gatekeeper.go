@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/franela/goreq"
 	gkClient "github.com/nemosupremo/vault-gatekeeper/gatekeeper"
 	"github.com/nemosupremo/vault-gatekeeper/policy"
@@ -75,6 +76,8 @@ type Config struct {
 	Version string
 
 	SkipPolicyLoading bool
+
+	Backoff *backoff.ExponentialBackOff
 }
 
 type peer struct {
@@ -281,6 +284,10 @@ func NewGatekeeper(conf Config) (*Gatekeeper, error) {
 			return nil, err
 		}
 	}
+
+	g.config.Backoff = backoff.NewExponentialBackOff()
+	g.config.Backoff.MaxElapsedTime = 1 * time.Minute
+	g.config.Backoff.MaxInterval = 15 * time.Second
 
 	return g, nil
 }
@@ -602,39 +609,45 @@ func (g *Gatekeeper) TokenTtl() (time.Duration, error) {
 	g.RLock()
 	token := g.Token
 	g.RUnlock()
-	r, err := vault.Request{goreq.Request{
-		Uri:             vault.Path("v1/auth/token/lookup-self"),
-		MaxRedirects:    10,
-		RedirectHeaders: true,
-		Method:          "GET",
-	}.WithHeader("X-Vault-Token", token)}.Do()
-	if err == nil {
-		defer r.Body.Close()
-		switch r.StatusCode {
-		case 200:
-			var resp struct {
-				Data struct {
-					Ttl int `json:"ttl"`
-				} `json:"data"`
+	ttl := time.Duration(0)
+	f := func() error {
+		r, err := vault.Request{goreq.Request{
+			Uri:             vault.Path("v1/auth/token/lookup-self"),
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+			Method:          "GET",
+		}.WithHeader("X-Vault-Token", token)}.Do()
+		if err == nil {
+			defer r.Body.Close()
+			switch r.StatusCode {
+			case 200:
+				var resp struct {
+					Data struct {
+						Ttl int `json:"ttl"`
+					} `json:"data"`
+				}
+				if err := r.Body.FromJsonTo(&resp); err == nil {
+					ttl = time.Duration(resp.Data.Ttl) * time.Second
+					return nil
+				} else {
+					return err
+				}
+			default:
+				var e vault.Error
+				e.Code = r.StatusCode
+				if err := r.Body.FromJsonTo(&e); err == nil {
+					return backoff.Permanent(e)
+				} else {
+					e.Errors = []string{"communication error."}
+					return e
+				}
 			}
-			if err := r.Body.FromJsonTo(&resp); err == nil {
-				return time.Duration(resp.Data.Ttl) * time.Second, nil
-			} else {
-				return 0, err
-			}
-		default:
-			var e vault.Error
-			e.Code = r.StatusCode
-			if err := r.Body.FromJsonTo(&e); err == nil {
-				return 0, e
-			} else {
-				e.Errors = []string{"communication error."}
-				return 0, e
-			}
+		} else {
+			return err
 		}
-	} else {
-		return 0, err
 	}
+	err := backoff.Retry(f, g.config.Backoff)
+	return ttl, err
 }
 
 func (g *Gatekeeper) RenewToken() error {
@@ -644,30 +657,34 @@ func (g *Gatekeeper) RenewToken() error {
 	g.RLock()
 	token := g.Token
 	g.RUnlock()
-	r, err := vault.Request{goreq.Request{
-		Uri:             vault.Path("v1/auth/token/renew-self"),
-		MaxRedirects:    10,
-		RedirectHeaders: true,
-		Method:          "POST",
-	}.WithHeader("X-Vault-Token", token)}.Do()
-	if err == nil {
-		defer r.Body.Close()
-		switch r.StatusCode {
-		case 200, 204:
-			return nil
-		default:
-			var e vault.Error
-			e.Code = r.StatusCode
-			if err := r.Body.FromJsonTo(&e); err == nil {
-				return e
-			} else {
-				e.Errors = []string{"communication error."}
-				return e
+	f := func() error {
+		r, err := vault.Request{goreq.Request{
+			Uri:             vault.Path("v1/auth/token/renew-self"),
+			MaxRedirects:    10,
+			RedirectHeaders: true,
+			Method:          "POST",
+		}.WithHeader("X-Vault-Token", token)}.Do()
+		if err == nil {
+			defer r.Body.Close()
+			switch r.StatusCode {
+			case 200, 204:
+				return nil
+			default:
+				var e vault.Error
+				e.Code = r.StatusCode
+				if err := r.Body.FromJsonTo(&e); err == nil {
+					return backoff.Permanent(e)
+				} else {
+					e.Errors = []string{"communication error."}
+					return e
+				}
 			}
+		} else {
+			return err
 		}
-	} else {
-		return err
 	}
+	err := backoff.Retry(f, g.config.Backoff)
+	return err
 }
 
 func (g *Gatekeeper) Peers() []peer {
