@@ -155,9 +155,9 @@ func (c *Client) requestTempToken(taskID string) (string, error) {
 		return "", err
 	}
 
-	if !gkTokResp.OK {
-		return "", errors.New(gkTokResp.Error)
-	}
+	// if !gkTokResp.OK {
+	// 	return "", errors.New(gkTokResp.Error)
+	// }
 
 	return gkTokResp.Token, nil
 }
