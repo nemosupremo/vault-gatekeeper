@@ -4,8 +4,9 @@ import (
 	"os"
 	"testing"
 
+	"vault-gatekeeper/vault"
+
 	"github.com/franela/goreq"
-	"github.com/nemosupremo/vault-gatekeeper/vault"
 	"github.com/segmentio/ksuid"
 	"github.com/spf13/viper"
 )

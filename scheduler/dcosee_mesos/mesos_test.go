@@ -11,7 +11,7 @@ func TestGetMesos(t *testing.T) {
 	if len(testMesosMaster) == 0 {
 		t.Skip()
 	} else {
-		if _, err := NewMesosScheduler(testMesosMaster); err != nil {
+		if _, err := NewMesosScheduler(testMesosMaster, "", nil); err != nil {
 			t.Fatalf("Failed to get mesos masters: %v", err)
 		}
 	}

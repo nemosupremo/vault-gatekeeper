@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nemosupremo/vault-gatekeeper"
-	"github.com/nemosupremo/vault-gatekeeper/scheduler"
-	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
+	"vault-gatekeeper"
+	"vault-gatekeeper/scheduler"
+	"vault-gatekeeper/vault/unsealer"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

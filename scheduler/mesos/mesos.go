@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"vault-gatekeeper/scheduler"
+
 	"github.com/mesos/mesos-go/api/v0/upid"
-	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 	"github.com/samuel/go-zookeeper/zk"
 	"github.com/sirupsen/logrus"
 )

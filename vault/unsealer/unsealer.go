@@ -7,7 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/franela/goreq"
-	"github.com/nemosupremo/vault-gatekeeper/vault"
+
+	"vault-gatekeeper/vault"
 )
 
 // The Unsealer interface represets a type that can retrieve a valid token

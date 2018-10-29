@@ -194,7 +194,7 @@ func NewMesosScheduler(master string, uid string, privateKeyFile io.Reader) (sch
 	client.Transport = tr
 	m.client = client
 
-	//CVheckt o see if you can communicate with the Mesos Master
+	//Check to see if you can communicate with the Mesos Master
 	if _, _, err := m.getMesosMaster(); err != nil {
 		return nil, err
 	}
@@ -601,12 +601,12 @@ func (m *mesosScheduler) getMesosTask(taskId string) (*mesosTask, string, string
 		}
 
 		if masterErr != nil {
-			logrus.Warnf("Mesos: Task ID %v was running on Slave %v, but no information about that slave was found.", task.ID, task.SlaveID)
+			log.Warnf("Mesos: Task ID %v was running on Slave %v, but no information about that slave was found.", task.ID, task.SlaveID)
 		} else {
 			if pid, err := upid.Parse(slave.PID); err == nil {
 				slaveHost = pid.Host
 			} else {
-				logrus.Warnf("Mesos: Failed to parse PID %v.", slave.PID)
+				log.Warnf("Mesos: Failed to parse PID %v.", slave.PID)
 			}
 		}
 
