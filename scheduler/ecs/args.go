@@ -1,7 +1,7 @@
 package ecs
 
 import (
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 )
 
 func init() {

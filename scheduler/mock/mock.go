@@ -4,7 +4,7 @@ import (
 	"net"
 	"time"
 
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 )
 
 var ValidTaskId = ""

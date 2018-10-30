@@ -6,7 +6,7 @@ import (
 	"path"
 	"time"
 
-	"vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
 
 	"github.com/franela/goreq"
 	log "github.com/sirupsen/logrus"

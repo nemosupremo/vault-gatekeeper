@@ -18,7 +18,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/mesos/mesos-go/api/v0/upid"

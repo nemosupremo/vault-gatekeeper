@@ -8,10 +8,10 @@ import (
 	"net/url"
 	"os"
 
-	"vault-gatekeeper"
-	"vault-gatekeeper/policy"
-	"vault-gatekeeper/scheduler"
-	"vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper"
+	"github.com/nemosupremo/vault-gatekeeper/policy"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
 
 	"github.com/franela/goreq"
 	log "github.com/sirupsen/logrus"

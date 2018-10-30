@@ -8,8 +8,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"vault-gatekeeper/policy"
-	"vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/policy"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
 
 	"github.com/franela/goreq"
 )
@@ -35,28 +35,28 @@ func (g *Gatekeeper) loadPolicies() (*policy.Policies, error) {
 func (g *Gatekeeper) GetPolicyConfig() ([]byte, error) {
 	initialPolicyDir := g.config.PolicyPath
 	policies := make(map[string]policy.Policy)
-	fmt.Printf("Policy Dir: %s\n", initialPolicyDir)
+	log.Debugf("Policy Dir: %s\n", initialPolicyDir)
 	if policyDirectories, err := g.getNestedPolicyDirs(initialPolicyDir, g.Token); err == nil {
 		for _, dir := range policyDirectories {
-			fmt.Printf("Dir: %s\n", dir)
+			log.Debugf("Dir: %s\n", dir)
 			if policy, err := getPolicy(dir, g.Token); err == nil {
-				fmt.Printf("Policies: %+v\n", policy)
+				log.Debugf("Policies: %+v\n", policy)
 				for k, v := range policy {
 					policies[k] = v
 				}
 			} else if err == policyNotFound {
-				fmt.Printf("%v\n", policyNotFound)
+				log.Warnf("%v\n", policyNotFound)
 				continue
 			} else {
 				return nil, err
 			}
 		}
 	} else {
-		fmt.Printf("Failed to find direcotries in %s\n", initialPolicyDir)
+		log.Errorf("Failed to find direcotries in %s\n", initialPolicyDir)
 		return nil, err
 	}
 
-	fmt.Printf("Policies: %+v\n", policies)
+	log.Debugf("Policies: %+v\n", policies)
 	if len(policies) == 0 {
 		return nil, policyNotFound
 	}
@@ -73,7 +73,7 @@ func (g *Gatekeeper) getNestedPolicyDirs(initialPolicyDir string, authToken stri
 
 	err := g.getDirList(initialPolicyDir, authToken, &nestedPolicyDirs, &subDirs)
 	if err != nil {
-		fmt.Printf("Error getting dir list: %v\n", err)
+		log.Errorf("Error getting dir list: %v\n", err)
 		return nestedPolicyDirs, err
 	}
 
@@ -95,7 +95,7 @@ func (g *Gatekeeper) getNestedPolicyDirs(initialPolicyDir string, authToken stri
 		}
 	}
 
-	fmt.Printf("Nested Policy Dirs: %+v\n", nestedPolicyDirs)
+	log.Debugf("Nested Policy Dirs: %+v\n", nestedPolicyDirs)
 
 	return nestedPolicyDirs, err
 }
@@ -124,7 +124,7 @@ func (g *Gatekeeper) getDirList(path string, authToken string, nestedPolicies *[
 				Renewable     bool   `json:"renewable"`
 			}
 			if err := r.Body.FromJsonTo(&scrts); err == nil {
-				fmt.Printf("Secrets List Data: %+v\n", scrts)
+				log.Debugf("Secrets List Data: %+v\n", scrts)
 				for i := range scrts.Data.Keys {
 					//add to sub dir list when "/" suffix
 					if strings.HasSuffix(scrts.Data.Keys[i], "/") {
@@ -135,12 +135,12 @@ func (g *Gatekeeper) getDirList(path string, authToken string, nestedPolicies *[
 				}
 				return nil
 			} else {
-				fmt.Printf("Get Dir List: %+v\n", err)
+				log.Errorf("Get Dir List: %+v\n", err)
 				return err
 			}
 		case 404:
 			/* A 404 is returned when no sub directories exist below the current directory which is ok. */
-			fmt.Printf("Get Dir List: received 404\n", err)
+			log.Infof("Get Dir List is empty\n")
 			return nil
 
 		case 403:
@@ -176,7 +176,7 @@ func getPolicy(path string, authToken string) (map[string]policy.Policy, error) 
 				} `json:"data"`
 			}
 			if err := r.Body.FromJsonTo(&resp); err == nil {
-				fmt.Printf("Response Body: %+v\n", resp)
+				log.Debugf("Response Body: %+v\n", resp)
 				return resp.Data.Data, nil
 			} else {
 				return nil, policyLoadError{fmt.Errorf("There was an error decoding policy from vault. This can occur " +

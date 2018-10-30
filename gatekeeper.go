@@ -14,12 +14,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	gkClient "vault-gatekeeper/gatekeeper"
-	"vault-gatekeeper/policy"
-	"vault-gatekeeper/scheduler"
-	"vault-gatekeeper/usagestore"
-	"vault-gatekeeper/vault"
-	"vault-gatekeeper/vault/unsealer"
+	gkClient "github.com/nemosupremo/vault-gatekeeper/gatekeeper"
+	"github.com/nemosupremo/vault-gatekeeper/policy"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/usagestore"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
 
 	"github.com/cenkalti/backoff"
 	"github.com/franela/goreq"

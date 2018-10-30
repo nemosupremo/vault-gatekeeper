@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

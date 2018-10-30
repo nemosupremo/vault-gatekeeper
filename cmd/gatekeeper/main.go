@@ -4,11 +4,11 @@ import (
 	"runtime"
 
 	// import schedulers before cmd
-	_ "vault-gatekeeper/scheduler/dcosee_mesos"
-	_ "vault-gatekeeper/scheduler/ecs"
-	_ "vault-gatekeeper/scheduler/mesos"
+	_ "github.com/nemosupremo/vault-gatekeeper/scheduler/dcosee_mesos"
+	_ "github.com/nemosupremo/vault-gatekeeper/scheduler/ecs"
+	_ "github.com/nemosupremo/vault-gatekeeper/scheduler/mesos"
 
-	"vault-gatekeeper/cmd"
+	"github.com/nemosupremo/vault-gatekeeper/cmd"
 )
 
 var (

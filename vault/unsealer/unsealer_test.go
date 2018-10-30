@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
 
 	"github.com/franela/goreq"
 	"github.com/segmentio/ksuid"

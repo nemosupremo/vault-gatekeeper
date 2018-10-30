@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/franela/goreq"
 
-	"vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
 )
 
 // The Unsealer interface represets a type that can retrieve a valid token

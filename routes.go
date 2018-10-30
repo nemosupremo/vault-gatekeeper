@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"vault-gatekeeper/scheduler"
-	"vault-gatekeeper/vault/unsealer"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
 
 	"github.com/franela/goreq"
 	"github.com/go-chi/chi"

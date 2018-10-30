@@ -1,7 +1,7 @@
 package mesos
 
 import (
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 
 	"github.com/spf13/viper"
 )

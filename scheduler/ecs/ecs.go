@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"

@@ -3,7 +3,7 @@ package cmd
 import (
 	"net/url"
 
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 
 	"github.com/franela/goreq"
 	log "github.com/sirupsen/logrus"

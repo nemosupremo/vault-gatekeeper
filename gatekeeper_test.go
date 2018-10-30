@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"vault-gatekeeper/policy"
-	"vault-gatekeeper/scheduler"
-	"vault-gatekeeper/scheduler/mock"
-	"vault-gatekeeper/vault"
-	"vault-gatekeeper/vault/unsealer"
+	"github.com/nemosupremo/vault-gatekeeper/policy"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler/mock"
+	"github.com/nemosupremo/vault-gatekeeper/vault"
+	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
 
 	"github.com/franela/goreq"
 	"github.com/segmentio/ksuid"

@@ -3,7 +3,7 @@ package dcosee_mesos
 import (
 	"os"
 
-	"vault-gatekeeper/scheduler"
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 
 	"github.com/spf13/viper"
 )
