@@ -14,14 +14,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cenkalti/backoff"
-	"github.com/franela/goreq"
 	gkClient "github.com/nemosupremo/vault-gatekeeper/gatekeeper"
 	"github.com/nemosupremo/vault-gatekeeper/policy"
 	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 	"github.com/nemosupremo/vault-gatekeeper/usagestore"
 	"github.com/nemosupremo/vault-gatekeeper/vault"
 	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
+
+	"github.com/cenkalti/backoff"
+	"github.com/franela/goreq"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 )
@@ -480,6 +481,7 @@ func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRo
 			currentPolicies := g.Policies
 			g.RUnlock()
 
+			log.Debugf("Find Policy:  %s\n", policyKey)
 			if policy, ok := currentPolicies.Get(policyKey); ok && len(policy.Roles) > 0 {
 				if err := g.Store.Acquire(g.Token, providerKey+":"+task.Id(), policy.NumUses, g.config.MaxTaskLife+1*time.Minute); err == nil {
 					roleName := policy.Roles[0]

@@ -5,12 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nemosupremo/vault-gatekeeper/scheduler"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/franela/goreq"
-	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 )
 
 type ecsScheduler struct {

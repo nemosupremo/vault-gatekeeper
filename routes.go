@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/franela/goreq"
-	"github.com/go-chi/chi"
 	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
+
+	"github.com/franela/goreq"
+	"github.com/go-chi/chi"
 )
 
 func (g *Gatekeeper) OkResponse(w http.ResponseWriter, message string) {
@@ -161,6 +162,7 @@ func (g *Gatekeeper) requestToken(w http.ResponseWriter, r *http.Request) {
 	if g.IsUnsealed() {
 		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
 			if token, ttl, err := g.RequestToken(body.Scheduler, body.TaskId, body.Role, r.RemoteAddr); err == nil {
+				log.Debugf("Reponse Token: %s\n", token)
 				resp := struct {
 					Unsealed  bool   `json:"unsealed"`
 					Token     string `json:"token"`
@@ -175,6 +177,7 @@ func (g *Gatekeeper) requestToken(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				json.NewEncoder(w).Encode(resp)
 			} else {
+				log.Debugf("Reponse Token Error: %v\n", err)
 				switch err {
 				case scheduler.ErrTaskNotFound, ErrHostMismatch:
 					g.ErrorResponse(w, http.StatusUnauthorized, err.Error())

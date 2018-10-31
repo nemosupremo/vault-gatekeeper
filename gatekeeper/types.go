@@ -34,10 +34,10 @@ type gkTokenReq struct {
 }
 
 type gkTokenResp struct {
-	OK     bool   `json:"ok"`
-	Token  string `json:"token"`
-	Status string `json:"status"`
-	Error  string `json:"error"`
+	Unsealed  bool   `json:"unsealed"`
+	Token     string `json:"token"`
+	Ttl       string `json:"ttl"`
+	VaultAddr string `json:"vault_addr"`
 }
 
 type vaultWrappedResponse struct {

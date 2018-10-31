@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/hashicorp/go-immutable-radix"
 )
 
@@ -95,6 +97,8 @@ func (p *Policies) Get(path string) (*Policy, bool) {
 	}
 
 	p.Tree.Root().WalkPath([]byte(path), walkFn)
+
+	log.Debugf("Get Policy:  Found: %t  Ret: %+v\n", foundPolicy, ret)
 	return ret, foundPolicy
 }
 
