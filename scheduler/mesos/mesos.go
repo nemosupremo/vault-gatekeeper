@@ -219,7 +219,7 @@ func (m *mesosScheduler) getMesosTask(taskId string) (mesosTask, string, string,
 	var masterErr error
 	if masterHosts, protocol, err := m.getMesosMaster(); err == nil {
 		for _, host := range masterHosts {
-			if resp, err := http.Get(protocol + "://" + host + "/state.json"); err == nil {
+			if resp, err := http.Get(protocol + "://" + host + "/state"); err == nil {
 				defer resp.Body.Close()
 				if err := json.NewDecoder(resp.Body).Decode(&state); err == nil {
 					if state.Pid == state.Leader {
