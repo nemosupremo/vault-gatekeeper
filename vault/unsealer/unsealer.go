@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/franela/goreq"
+
 	"github.com/nemosupremo/vault-gatekeeper/vault"
 )
 

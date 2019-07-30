@@ -8,11 +8,12 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/franela/goreq"
 	"github.com/nemosupremo/vault-gatekeeper"
 	"github.com/nemosupremo/vault-gatekeeper/policy"
 	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 	"github.com/nemosupremo/vault-gatekeeper/vault"
+
+	"github.com/franela/goreq"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
