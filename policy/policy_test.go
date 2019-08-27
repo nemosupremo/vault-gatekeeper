@@ -40,6 +40,11 @@ const samplePolicy = `{
 	"mesos:framework:service/*": {
 	    "roles":["mesos_framework_service"],
 	    "num_uses":1
+	},
+	"mesos:marathone:*":{
+		"roles":["mesos_marathone_taskA"],
+		"regexp":"\\d{4}\\w{2}\\.taskA",
+		"num_uses":1
 	}
 }`
 
@@ -88,6 +93,10 @@ func TestSamplePolicy(t *testing.T) {
 		}
 
 		if pass, _, actual := shouldContainAll(mustGet(pols.Get("mesos:framework:task2")), "mesos_framework_task"); pass {
+			t.Fatalf("Test of '%s' failed. 'task2' should not conatain permission of 'task'. Had: %v", "mesos:framework:task", actual)
+		}
+
+		if pass, _, actual := shouldContainAll(mustGet(pols.Get("mesos:marathone:6668wz.taskA")), "mesos_child", "mesos_marathone_taskA"); pass {
 			t.Fatalf("Test of '%s' failed. 'task2' should not conatain permission of 'task'. Had: %v", "mesos:framework:task", actual)
 		}
 
