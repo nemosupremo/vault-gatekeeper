@@ -592,7 +592,7 @@ func (g *Gatekeeper) RenewalWorker(controlChan chan struct{}) {
 			if err := g.RenewToken(); err == nil {
 				log.Infof("Renewed Vault Token (original ttl: %v)", ttl)
 			} else {
-				log.Warn("Failed to renew Vault token. Is the policy set correctly? Gatekeeper will now be sealed: %v", err)
+				log.Warnf("Failed to renew Vault token. Is the policy set correctly? Gatekeeper will now be sealed: %v", err)
 				g.Seal()
 				return
 			}
