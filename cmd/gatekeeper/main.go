@@ -8,7 +8,7 @@ import (
 	_ "github.com/nemosupremo/vault-gatekeeper/scheduler/ecs"
 	_ "github.com/nemosupremo/vault-gatekeeper/scheduler/mesos"
 
-	"github.com/nemosupremo/vault-gatekeeper/cmd"
+	"github.com/packetloop/vault-gatekeeper/cmd"
 )
 
 var (

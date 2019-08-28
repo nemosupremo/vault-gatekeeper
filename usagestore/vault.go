@@ -142,9 +142,6 @@ func (v *vaultStore) Acquire(token string, key string, max int, ttl time.Duratio
 	}
 	if m, version, err := v.getStore(token); err == nil {
 		if entry, ok := m.Get(key); ok {
-			if entry.usage >= entry.max {
-				return ErrPutLimitExceeded
-			}
 			entry.usage += 1
 			m.Set(key, entry)
 		} else {
@@ -161,6 +158,34 @@ func (v *vaultStore) Acquire(token string, key string, max int, ttl time.Duratio
 			n := rand.Int63n(500)
 			time.Sleep(time.Millisecond * time.Duration(n))
 			return v.Acquire(token, key, max, ttl)
+		} else {
+			return err
+		}
+	} else {
+		return err
+	}
+}
+
+// AcquireBypassScheduler method is being used when --local-dev-mode flag is enabled. Its purpose
+// is to allow faster local development where a user does not need to have a running Mesos/other
+// scheduler and does not check for token num_uses. This is not meant to use in production.
+func (v *vaultStore) AcquireBypassScheduler(token string, key string, ttl time.Duration) error {
+
+	if m, version, err := v.getStore(token); err == nil {
+		if entry, ok := m.Get(key); ok {
+			m.Set(key, entry)
+		} else {
+			entry.created = time.Now()
+			entry.expire = entry.created.Add(ttl)
+			m.Set(key, entry)
+		}
+		m.Cleanup()
+		if err := v.putStore(token, version, m); err == nil {
+			return nil
+		} else if err == errCasViolation {
+			n := rand.Int63n(500)
+			time.Sleep(time.Millisecond * time.Duration(n))
+			return v.AcquireBypassScheduler(token, key, ttl)
 		} else {
 			return err
 		}

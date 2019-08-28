@@ -57,7 +57,23 @@ func (m *memoryStore) Acquire(_ string, key string, max int, ttl time.Duration) 
 	}
 	m.Unlock()
 	return nil
-}
+} 
+
+// AcquireBypassScheduler method is being used when --local-dev-mode flag is enabled. Its purpose
+// is to allow faster local development where a user does not need to have a running Mesos/other
+// scheduler and does not check for token num_uses. This is not meant to use in production.
+func (m *memoryStore) AcquireBypassScheduler(_ string, key string,  ttl time.Duration) error {
+	m.Lock()
+	if entry, ok := m.set[key]; ok {
+		m.set[key] = entry
+	} else {
+		entry.created = time.Now()
+		entry.expire = entry.created.Add(ttl)
+		m.set[key] = entry
+	}
+	m.Unlock()
+	return nil
+} 
 
 func (m *memoryStore) UsageCount(_ string, key string) (int, error) {
 	m.RLock()

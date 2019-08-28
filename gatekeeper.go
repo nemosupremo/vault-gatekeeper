@@ -17,9 +17,9 @@ import (
 	gkClient "github.com/nemosupremo/vault-gatekeeper/gatekeeper"
 	"github.com/nemosupremo/vault-gatekeeper/policy"
 	"github.com/nemosupremo/vault-gatekeeper/scheduler"
-	"github.com/nemosupremo/vault-gatekeeper/usagestore"
 	"github.com/nemosupremo/vault-gatekeeper/vault"
 	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
+	"github.com/packetloop/vault-gatekeeper/usagestore"
 
 	"github.com/cenkalti/backoff"
 	"github.com/franela/goreq"
@@ -57,6 +57,7 @@ type Config struct {
 		Insecure     bool
 		KvVersion    string
 		AppRoleMount string
+		PublicAddr   string
 	}
 
 	Metrics struct {
@@ -79,6 +80,8 @@ type Config struct {
 	SkipPolicyLoading bool
 
 	Backoff *backoff.ExponentialBackOff
+
+	LocalDevMode bool
 }
 
 type peer struct {
@@ -431,12 +434,110 @@ func (g *Gatekeeper) GetSecretId(roleName string, authToken string) (string, err
 	}
 }
 
+func localDevTaskName() string {
+	return "dummyName"
+}
+
+func localDevTaskID() string {
+	return "dummyID"
+}
+
+func localDevTaskGroupName() string {
+	return "dummyGroup"
+}
+
+func (g *Gatekeeper) acquire(providerKey string, policyNumUses int, maxTaskLife time.Duration) error {
+	if g.config.LocalDevMode == true {
+		return g.Store.AcquireBypassScheduler(g.Token, providerKey, maxTaskLife)
+	}
+	return g.Store.Acquire(g.Token, providerKey, policyNumUses, maxTaskLife)
+}
+
+// bypassScheduler method is duplicate block of line 540. This is a hack,
+// if server param `--local-dev-mode true` is passed, this would respond with
+// a temporary Vault token for app to consume and skip verification whether
+// task ID is valid and authorized to receive a Vault temporary token or not.
+// This is only intended for local development to allow developers to test module
+// module or integration without actually deploying a task to a scheduler.
+func (g *Gatekeeper) bypassSchedulerCheck(providerKey string, requestedRole string) (string, time.Duration, error) {
+
+	policyKey := providerKey + ":" + localDevTaskGroupName() + ":" + localDevTaskName()
+	g.RLock()
+	currentPolicies := g.Policies
+	g.RUnlock()
+
+	if policy, ok := currentPolicies.Get(policyKey); ok && len(policy.Roles) > 0 {
+		if err := g.acquire(providerKey+":"+localDevTaskID(), policy.NumUses, g.config.MaxTaskLife+1*time.Minute); err == nil {
+			roleName := policy.Roles[0]
+			if requestedRole != "" {
+				allowed := false
+				for _, role := range policy.Roles {
+					if requestedRole == role {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					g.metrics.Denied()
+					return "", 0, ErrRoleMismatch
+				}
+			}
+			if roleName == "{{name}}" {
+				roleName = localDevTaskName()
+			}
+
+			g.RLock()
+			authToken := g.Token
+			g.RUnlock()
+
+			if roleId, err := g.GetRoleId(roleName, authToken); err == nil {
+				if secretId, err := g.GetSecretId(roleName, authToken); err == nil {
+					uns := unsealer.AppRoleUnsealer{
+						RoleId:   roleId,
+						SecretId: secretId,
+						Endpoint: g.config.Vault.AppRoleMount,
+						Wrap:     1 * time.Minute,
+					}
+					if token, err := uns.Token(); err == nil {
+						g.metrics.Success()
+						return token, uns.Wrap, nil
+					} else {
+						g.metrics.Denied()
+						return "", 0, err
+					}
+				} else {
+					log.Warnf("recieved error when trying to get the secret id for role %s: %v", roleName, err)
+					g.metrics.Failed()
+					return "", 0, err
+				}
+			} else if err == ErrNoSuchRole {
+				g.metrics.Denied()
+				return "", 0, ErrNoSuchRole
+			} else {
+				g.metrics.Failed()
+				log.Warnf("recieved error when trying to get the role id for role %s: %v", roleName, err)
+				return "", 0, err
+			}
+		} else if err == usagestore.ErrPutLimitExceeded {
+			g.metrics.Denied()
+			return "", 0, ErrMaxTokensGiven
+		} else {
+			g.metrics.Denied()
+			return "", 0, err
+		}
+	} else {
+		g.metrics.Denied()
+		return "", 0, ErrNoPolicy
+	}
+}
+
 func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRole string, remoteAddr string) (string, time.Duration, error) {
 	g.metrics.Request()
 	if !g.IsUnsealed() {
 		g.metrics.Denied()
 		return "", 0, ErrSealed
 	}
+
 	if providerKey == "" {
 		providerKey = g.config.DefaultScheduler
 	}
@@ -450,6 +551,13 @@ func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRo
 		}
 	}
 	if provider, ok := g.Schedulers[providerKey]; ok {
+		// This is a hack, if server param --local-dev-mode true is passed,
+		// this would not call any scheduler and verify task. This would just
+		// return a temporary Vault token for app to consume.
+		if g.config.LocalDevMode == true {
+			return g.bypassSchedulerCheck(providerKey, requestedRole)
+		}
+
 		if task, err := provider.LookupTask(taskId); err == nil {
 			if time.Since(task.StartTime()) >= g.config.MaxTaskLife {
 				g.metrics.Denied()
@@ -467,7 +575,6 @@ func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRo
 					return "", 0, ErrHostMismatch
 				}
 			}
-
 			taskName := task.Name()
 			if g.config.UseImageNames && task.Image() != "" {
 				taskName = task.Image()
@@ -483,7 +590,7 @@ func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRo
 
 			log.Debugf("Find Policy:  %s\n", policyKey)
 			if policy, ok := currentPolicies.Get(policyKey); ok && len(policy.Roles) > 0 {
-				if err := g.Store.Acquire(g.Token, providerKey+":"+task.Id(), policy.NumUses, g.config.MaxTaskLife+1*time.Minute); err == nil {
+				if err := g.acquire(providerKey+":"+task.Id(), policy.NumUses, g.config.MaxTaskLife+1*time.Minute); err == nil {
 					roleName := policy.Roles[0]
 					if requestedRole != "" {
 						allowed := false
@@ -512,7 +619,7 @@ func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRo
 								RoleId:   roleId,
 								SecretId: secretId,
 								Endpoint: g.config.Vault.AppRoleMount,
-								Wrap:     100 * time.Minute,
+								Wrap:     1 * time.Minute,
 							}
 							if token, err := uns.Token(); err == nil {
 								g.metrics.Success()

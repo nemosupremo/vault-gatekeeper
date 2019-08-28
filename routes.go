@@ -149,6 +149,13 @@ func (g *Gatekeeper) unseal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (g *Gatekeeper) getVaultAddr() string {
+	if g.config.LocalDevMode == true {
+		return g.config.Vault.PublicAddr
+	}
+	return g.config.Vault.Address
+}
+
 func (g *Gatekeeper) requestToken(w http.ResponseWriter, r *http.Request) {
 	log := GetLog(r)
 	if r.Header.Get("Gatekeeper-Proxy") != "" {
@@ -172,7 +179,7 @@ func (g *Gatekeeper) requestToken(w http.ResponseWriter, r *http.Request) {
 					Unsealed:  g.IsUnsealed(),
 					Token:     token,
 					Ttl:       ttl.String(),
-					VaultAddr: g.config.Vault.Address,
+					VaultAddr: g.getVaultAddr(),
 				}
 				w.WriteHeader(http.StatusOK)
 				json.NewEncoder(w).Encode(resp)

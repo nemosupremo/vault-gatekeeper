@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/nemosupremo/vault-gatekeeper"
+	"github.com/packetloop/vault-gatekeeper"
 	"github.com/nemosupremo/vault-gatekeeper/policy"
 	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 	"github.com/nemosupremo/vault-gatekeeper/vault"

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nemosupremo/vault-gatekeeper"
+	"github.com/packetloop/vault-gatekeeper"
 	"github.com/nemosupremo/vault-gatekeeper/scheduler"
 	"github.com/nemosupremo/vault-gatekeeper/vault/unsealer"
 
@@ -59,6 +59,9 @@ func init() {
 		{"metrics-statsd-prefix", "gatekeeper", "StatsD prefix."},
 		{"metrics-statsd-influx", false, "Enable influxdb tags."},
 		{"metrics-statsd-datadog", false, "Enable datadog tags."},
+
+		{"local-dev-mode", false, "Bypass any scheduler check to intended for local development. Not recommended for production use."},
+		{"vault-public-addr", defaultVaultAddr, "Return a public Vault address for client to connect to. Intended for Vault cluster in private network and connection via proxy."},
 	}
 
 	options = append(options, scheduler.AllArgs()...)
@@ -162,6 +165,9 @@ func gatekeeperConf() gatekeeper.Config {
 	conf.Metrics.Statsd.Influx = viper.GetBool("metrics-statsd-influx")
 	conf.Metrics.Statsd.Datadog = viper.GetBool("metrics-statsd-datadog")
 
+
+	conf.LocalDevMode = viper.GetBool("local-dev-mode")
+	conf.Vault.PublicAddr = viper.GetString("vault-public-addr")
 	return conf
 }
 
@@ -169,6 +175,10 @@ func gatekeeperServer(*cobra.Command, []string) {
 	intro()
 
 	conf := gatekeeperConf()
+
+	if conf.LocalDevMode == true {
+		localDevMode()
+	}
 
 	if g, err := gatekeeper.NewGatekeeper(conf); err == nil {
 		logrus.Infof("Starting Gatekeeper on %v", conf.ListenAddress)
@@ -178,4 +188,9 @@ func gatekeeperServer(*cobra.Command, []string) {
 	} else {
 		logrus.Fatalf("Failed to start gatekeeper: %v", err)
 	}
+}
+
+func localDevMode() {
+	message := "You have enabled local development mode that would by pass any scheduler check. This is not recommended for production use."
+	fmt.Printf("%s\n", message)
 }

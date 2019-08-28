@@ -23,6 +23,11 @@ type UsageStore interface {
 	// Acquire should panic if max is less than 1.
 	Acquire(string, string, int, time.Duration) error
 
+	// AcquireBypassScheduler is a hack to make local-dev-mode work. This bypass
+	// any scheduler check and policy num users. Intended for local developement
+	// where user do not have to have a running scheduler such as Mesos.
+	AcquireBypassScheduler(string, string, time.Duration) error
+
 	// How many times a process requested a token.
 	UsageCount(string, string) (int, error)
 

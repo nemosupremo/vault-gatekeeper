@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nemosupremo/vault-gatekeeper/vault"
+	"github.com/packetloop/vault-gatekeeper/vault"
 
 	"github.com/franela/goreq"
 	"github.com/segmentio/ksuid"
