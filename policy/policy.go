@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -13,9 +14,10 @@ import (
 
 type Policy struct {
 	Roles         []string `json:"roles"`
+	Regexp        string   `json:"regexp,omitempty"`
 	NumUses       int      `json:"num_uses"`
 	strictestPath []byte
-	wildcard      bool
+	regexp        *regexp.Regexp
 }
 
 func (p *Policy) merge(path []byte, other Policy) {
@@ -54,17 +56,25 @@ func LoadPoliciesFromJson(data []byte) (*Policies, error) {
 		tree := iradix.New()
 		txn := tree.Txn()
 		for k, v := range pol {
-			if strings.HasSuffix(k, "*") {
-				v.wildcard = true
-			}
 			if strings.HasSuffix(k, ":") {
 				return nil, errors.New("Invalid key name '" + k + "'. Keys must not end with a ':'")
 			}
 			if v.NumUses < 1 {
 				return nil, errors.New("Invalid num_uses for key '" + k + "'.")
 			}
+			wildcard := false
 			if k != "*" {
+				wildcard = strings.HasSuffix(k, "*")
 				k = strings.TrimSuffix(k, "*")
+			}
+			if wildcard {
+				v.Regexp = k + v.Regexp
+			}
+			if v.Regexp != "" {
+				v.regexp, err = regexp.Compile(v.Regexp)
+				if err != nil {
+					return nil, errors.New("Invalid regexp for key '" + k + "'.")
+				}
 			}
 			txn.Insert([]byte(k), v)
 		}
@@ -85,12 +95,14 @@ func (p *Policies) Get(path string) (*Policy, bool) {
 
 	walkFn := func(k []byte, _v interface{}) bool {
 		v := _v.(Policy)
-		if v.wildcard && bytes.HasPrefix([]byte(path), k) {
+		if bytes.Equal(k, []byte(path)) {
 			ret.merge(k, v)
 			foundPolicy = true
-		} else if bytes.Equal(k, []byte(path)) {
-			ret.merge(k, v)
-			foundPolicy = true
+		} else if v.regexp != nil {
+			if v.regexp.MatchString(path) {
+				ret.merge(k, v)
+				foundPolicy = true
+			}
 		}
 
 		return false
