@@ -30,6 +30,8 @@ func init() {
 		{"auth-aws-nonce", "", "AWS-EC2 nonce for repeated authentication."},
 
 		{"auth-gh-token", "", "Vault authorized github personal token."},
+
+		{"insecure-skip-tls-verify", false, `Skip TLS verification for insecure cerificates with the Gatekeeper host. Useful for communicating with clusters with self signed certificates. Defaults to "false".`},
 	}
 	unsealOptions = options
 
@@ -127,6 +129,7 @@ func gatekeeperUnseal(cmd *cobra.Command, args []string) {
 			Method:      "POST",
 			Body:        body,
 			ContentType: "application/json",
+			Insecure:    viper.GetBool("insecure-skip-tls-verify"),
 		}.Do()
 		if err == nil {
 			defer req.Body.Close()
