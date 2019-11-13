@@ -337,8 +337,11 @@ func TestRequestToken(t *testing.T) {
 
 		mock.ValidTaskId = "localhost"
 		g.config.HostCheck = true
-		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "{{name}}", "localhost"); err != nil {
-			t.Fatalf("Token request should have succeeded with {{name}}: %v", err)
+		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "", "localhost"); err != nil {
+			t.Fatalf("Token request should have succeeded: %v", err)
+		}
+		if _, _, err := g.RequestToken("mock", mock.ValidTaskId, "", "172.217.9.78"); err != ErrHostMismatch {
+			t.Fatalf("Token request should have failed with ErrHostMismatch: %v", err)
 		}
 		g.config.HostCheck = false
 
