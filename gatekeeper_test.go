@@ -268,7 +268,7 @@ func TestRequestToken(t *testing.T) {
 	}
 
 	policyPath := "v1/secret/data/" + ksuid.New().String()
-	for _, appRoleName := range []string{"mock", "test_role"} {
+	for _, appRoleName := range []string{"mock", "test_role", "special"} {
 		r, err := vault.Request{goreq.Request{
 			Uri:             vault.Path("/v1/auth/" + authPath + "/role/" + appRoleName),
 			MaxRedirects:    10,

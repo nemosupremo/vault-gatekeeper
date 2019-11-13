@@ -58,7 +58,7 @@ func (m *mockScheduler) LookupTask(taskId string) (scheduler.Task, error) {
 		if taskId == "localhost" {
 			return &task{
 				id:        taskId,
-				name:      "special",
+				name:      "localhost",
 				startTime: time.Now(),
 				ip:        net.IPv4(127, 0, 0, 1),
 			}, nil
