@@ -490,6 +490,7 @@ func (g *Gatekeeper) RequestToken(providerKey string, taskId string, requestedRo
 						for _, role := range policy.Roles {
 							if requestedRole == role {
 								allowed = true
+								roleName = role
 								break
 							}
 						}
